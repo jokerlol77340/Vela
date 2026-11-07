@@ -1545,4 +1545,7 @@
     <string name="settings_nav_icon_stop">Stop signs</string>
     <string name="settings_nav_icon_railx">Level crossings</string>
     <string name="settings_nav_icon_hump">Speed humps</string>
+    <string name="settings_theme_amoled_for_dark">Use AMOLED black for dark theme</string>
+    <string name="settings_theme_amoled_for_dark_hint">When switching to dark mode, uses true AMOLED black instead of dark gray.</string>
+    <string name="settings_theme_amoled_for_nav_hint">When driving at night, uses true AMOLED black instead of dark gray.</string>
 </resources>

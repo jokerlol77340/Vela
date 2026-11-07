@@ -1545,4 +1545,7 @@
     <string name="settings_nav_icon_stop">Panneaux Stop</string>
     <string name="settings_nav_icon_railx">Passages à niveau</string>
     <string name="settings_nav_icon_hump">Ralentisseurs</string>
+    <string name="settings_theme_amoled_for_dark">Utiliser le noir AMOLED pour le mode sombre</string>
+    <string name="settings_theme_amoled_for_dark_hint">Lors du passage au thème sombre, utilise le noir pur AMOLED plutôt que le gris foncé.</string>
+    <string name="settings_theme_amoled_for_nav_hint">Pendant la conduite de nuit, utilise le noir pur AMOLED plutôt que le gris foncé.</string>
 </resources>
