@@ -43,6 +43,9 @@
     <string name="settings_voice_variant_go">OK</string>
     <string name="settings_voice_variant_hint">Cette voix compte des centaines de locuteurs, appuyez sur ◀ ▶ pour les écouter un par un, ou saisissez un numéro de variante puis OK pour y accéder directement (un exemple est lu). Conservez celle qui vous plaît.</string>
     <string name="settings_navigation">Navigation</string>
+    <string name="settings_nav_tab_general">Général</string>
+    <string name="settings_nav_tab_display">Affichage</string>
+    <string name="settings_nav_tab_alerts">Alertes &amp; Radars</string>
     <string name="settings_vibrate_on_turns">Vibrer aux virages</string>
     <string name="settings_mode_driving">Voiture</string>
     <string name="settings_mode_walking">À pied</string>
@@ -703,6 +706,8 @@
     <string name="settings_contacts_search_hint">Saisir le nom d\'un contact propose ses adresses enregistrées, avec sa photo et le libellé de l\'adresse issu de votre carnet d\'adresses. Vos contacts restent sur ce téléphone ; en choisir un recherche cette adresse comme n\'importe quelle saisie et l\'ouvre sous le nom du contact.</string>
     <string name="suggestion_contact_badge">Contact</string>
     <string name="settings_speed_cams">Radars</string>
+    <string name="settings_speed_cams_display">Afficher les radars sur la carte</string>
+    <string name="settings_flock_display">Afficher sur la carte</string>
     <string name="settings_speed_cam_warn">M\'avertir à voix haute</string>
     <string name="settings_speed_cam_warn_hint">Annonce \"Radar devant\" à l\'approche d\'un radar pendant la navigation, environ douze secondes à l\'avance. Suit votre réglage d\'instructions vocales. Avertir de la présence de radars au volant est réglementé dans certains pays : l\'option reste désactivée tant que vous ne l\'activez pas.</string>
     <string name="nav_speed_camera_ahead">Radar devant</string>

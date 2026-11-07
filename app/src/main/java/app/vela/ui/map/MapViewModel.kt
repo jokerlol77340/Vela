@@ -47,6 +47,7 @@ import app.vela.voice.VoiceInstaller
 import app.vela.service.NavigationService
 import app.vela.core.model.TransitItinerary
 import app.vela.core.model.TransitStep
+import app.vela.core.model.TransitWalkStep
 import app.vela.web.WebDirectionsFetcher
 import app.vela.web.WebPhotoFetcher
 import app.vela.web.WebReviewsFetcher
@@ -7014,9 +7015,13 @@ class MapViewModel @Inject constructor(
 
     /** Turn-by-turn walking steps between two points (for a transit trip's walk legs), via the
      *  normal walk router. Returns the maneuver instructions, or empty on failure. */
-    suspend fun walkDirections(from: LatLng, to: LatLng): List<String> = runCatching {
+    suspend fun walkDirections(from: LatLng, to: LatLng): List<TransitWalkStep> = runCatching {
         dataSource.directions(from, to, TravelMode.WALK).firstOrNull()
-            ?.maneuvers?.mapNotNull { it.instruction.takeIf { s -> s.isNotBlank() } }.orEmpty()
+            ?.maneuvers?.mapNotNull { m ->
+                m.instruction.takeIf { it.isNotBlank() }?.let { text ->
+                    TransitWalkStep(instruction = text, location = m.location, distanceMeters = m.distanceMeters)
+                }
+            }.orEmpty()
     }.getOrDefault(emptyList())
 
     /** Transit can't self-route (no traffic-free open transit graph) and Google

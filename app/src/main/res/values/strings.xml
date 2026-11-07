@@ -79,6 +79,9 @@
     <string name="settings_voice_variant_go">Go</string>
     <string name="settings_voice_variant_hint">This voice has hundreds of speakers. Tap ◀ ▶ to audition one at a time, or type a variant number and Go to jump straight to it (it speaks a sample). Keep the one you like.</string>
     <string name="settings_navigation">Navigation</string>
+    <string name="settings_nav_tab_general">General</string>
+    <string name="settings_nav_tab_display">Display</string>
+    <string name="settings_nav_tab_alerts">Alerts &amp; Radars</string>
     <string name="settings_vibrate_on_turns">Vibrate on turns</string>
     <string name="settings_mode_driving">Driving</string>
     <string name="settings_mode_walking">Walking</string>
@@ -125,6 +128,8 @@
     <string name="settings_flock">Surveillance cameras</string>
     <string name="settings_flock_hint">Shows mapped automated license-plate reader (Flock) cameras, from the community DeFlock project in OpenStreetMap. On by default.</string>
     <string name="settings_speed_cams">Speed cameras</string>
+    <string name="settings_speed_cams_display">Show speed cameras on map</string>
+    <string name="settings_flock_display">Show surveillance cameras on map</string>
     <string name="settings_speed_cam_warn">Speed camera alerts</string>
     <string name="settings_speed_cam_warn_hint">Alerts you as you approach a speed camera while navigating. Warning about cameras while driving is restricted in some countries, so this is off unless you turn it on.</string>
     <string name="settings_speed_cam_nav_card">Speed camera heads-up card</string>

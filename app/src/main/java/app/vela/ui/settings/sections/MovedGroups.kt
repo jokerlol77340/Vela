@@ -48,10 +48,10 @@ import app.vela.ui.settings.ToggleRow
 @Composable
 internal fun CameraSettingsGroup() {
     val context = LocalContext.current
-    SettingsGroup(title = stringResource(R.string.settings_cameras_group)) {
+    SettingsGroup(title = stringResource(R.string.settings_flock)) {
         // 1. Surveillance / plate cameras (Flock)
         ToggleRow(
-            label = stringResource(R.string.settings_flock),
+            label = stringResource(R.string.settings_flock_display),
             checked = app.vela.ui.Flock.on.value,
             onCheckedChange = { app.vela.ui.Flock.set(context, it) },
             hint = stringResource(R.string.settings_flock_hint),
@@ -89,12 +89,14 @@ internal fun CameraSettingsGroup() {
                 onSelect = { app.vela.ui.FlockNavAlert.setDistanceMeters(context, it) },
             )
         }
+    }
 
-        GroupDivider()
+    androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
 
+    SettingsGroup(title = stringResource(R.string.settings_speed_cams)) {
         // 2. Speed cameras (Radars)
         ToggleRow(
-            label = stringResource(R.string.settings_speed_cams),
+            label = stringResource(R.string.settings_speed_cams_display),
             checked = app.vela.ui.SpeedCams.on.value,
             onCheckedChange = { app.vela.ui.SpeedCams.set(context, it) },
             hint = stringResource(R.string.settings_speed_cams_hint),

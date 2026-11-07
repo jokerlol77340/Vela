@@ -231,6 +231,7 @@ import app.vela.core.model.TransitLine
 import app.vela.core.model.TransitMode
 import app.vela.core.model.TransitStep
 import app.vela.core.model.TransitStopTime
+import app.vela.core.model.TransitWalkStep
 import app.vela.core.model.TravelMode
 import coil.compose.AsyncImage
 import app.vela.ui.RatingStars
@@ -1615,7 +1616,7 @@ fun DirectionsPanel(
     onStartNav: () -> Unit,
     onSteps: (() -> Unit)?,
     onSearchAlongRoute: (String) -> Unit,
-    onWalkDirections: suspend (LatLng, LatLng) -> List<String> = { _, _ -> emptyList() },
+    onWalkDirections: suspend (LatLng, LatLng) -> List<TransitWalkStep> = { _, _ -> emptyList() },
     onStartTransit: (TransitItinerary) -> Unit = {},
     onTransitPreview: (TransitItinerary, Boolean) -> Unit = { _, _ -> },
     onTimeSelected: (Int, Long?) -> Unit = { _, _ -> },
@@ -2448,7 +2449,7 @@ private fun TransitBoard(
     ink: Color,
     dim: Color,
     dark: Boolean,
-    onWalkDirections: suspend (LatLng, LatLng) -> List<String> = { _, _ -> emptyList() },
+    onWalkDirections: suspend (LatLng, LatLng) -> List<TransitWalkStep> = { _, _ -> emptyList() },
     onStartTransit: (TransitItinerary) -> Unit = {},
     onPreview: (TransitItinerary, Boolean) -> Unit = { _, _ -> },
 ) {
@@ -2489,7 +2490,7 @@ fun TransitNavSheet(
     onNext: () -> Unit,
     onBack: () -> Unit,
     onEnd: () -> Unit,
-    onWalkDirections: suspend (LatLng, LatLng) -> List<String>,
+    onWalkDirections: suspend (LatLng, LatLng) -> List<TransitWalkStep>,
     modifier: Modifier = Modifier,
 ) {
     val dark = isAppInDarkTheme()
@@ -2950,7 +2951,7 @@ private fun departsInLabel(depEpochSec: Long?, nowSec: Long): String? {
 }
 
 @Composable
-private fun TransitRow(t: TransitItinerary, nowSec: Long, ink: Color, dim: Color, dark: Boolean, onWalkDirections: suspend (LatLng, LatLng) -> List<String> = { _, _ -> emptyList() }, onStartTransit: (TransitItinerary) -> Unit = {}, onPreview: (TransitItinerary, Boolean) -> Unit = { _, _ -> }) {
+private fun TransitRow(t: TransitItinerary, nowSec: Long, ink: Color, dim: Color, dark: Boolean, onWalkDirections: suspend (LatLng, LatLng) -> List<TransitWalkStep> = { _, _ -> emptyList() }, onStartTransit: (TransitItinerary) -> Unit = {}, onPreview: (TransitItinerary, Boolean) -> Unit = { _, _ -> }) {
     // Held outside the row (issue #812): the row leaves composition when the sheet drops to its
     // card and came back collapsed, with its itinerary still drawn on the map.
     val expandedKey = app.vela.ui.TransitExpanded.keyOf(t)
@@ -3096,7 +3097,7 @@ private fun TransitStepRow(
     s: TransitStep,
     ink: Color,
     dim: Color,
-    onWalkDirections: suspend (LatLng, LatLng) -> List<String> = { _, _ -> emptyList() },
+    onWalkDirections: suspend (LatLng, LatLng) -> List<TransitWalkStep> = { _, _ -> emptyList() },
     isCurrentStep: Boolean = false,
     isPastStep: Boolean = false,
     userLocation: LatLng? = null,
@@ -3108,9 +3109,17 @@ private fun TransitStepRow(
         val from = s.walkFrom; val to = s.walkTo
         val canExpand = from != null && to != null
         var open by remember { mutableStateOf(false) }
-        var steps by remember(from, to) { mutableStateOf<List<String>?>(null) }
+        var steps by remember(from, to) { mutableStateOf<List<TransitWalkStep>?>(null) }
+        LaunchedEffect(isCurrentStep) {
+            if (isCurrentStep) open = true
+        }
         if (open && canExpand) {
             LaunchedEffect(from, to) { steps = onWalkDirections(from!!, to!!) }
+        }
+        val activeWalkIdx = remember(steps, userLocation, isCurrentStep) {
+            if (isCurrentStep && steps != null) {
+                app.vela.core.nav.TransitProgress.activeWalkStepIndex(steps!!, userLocation, from, to)
+            } else -1
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
             Icon(
@@ -3151,8 +3160,17 @@ private fun TransitStepRow(
                             null -> CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                             else -> if (list.isEmpty()) {
                                 Text(stringResource(R.string.place_walk), style = MaterialTheme.typography.labelSmall, color = dim)
-                            } else list.forEach { instr ->
-                                Text("•  $instr", style = MaterialTheme.typography.labelSmall, color = dim)
+                            } else list.forEachIndexed { idx, walkStep ->
+                                val isCurrent = isCurrentStep && idx == activeWalkIdx
+                                val isPassed = isPastStep || (isCurrentStep && activeWalkIdx >= 0 && idx < activeWalkIdx)
+                                WalkStepLine(
+                                    step = walkStep,
+                                    ink = effectiveInk,
+                                    dim = dim,
+                                    isCurrentStep = isCurrent,
+                                    isPassedStep = isPassed,
+                                    accentColor = MaterialTheme.colorScheme.primary,
+                                )
                             }
                         }
                     }
@@ -3277,6 +3295,73 @@ private fun CurrentStepBadge(color: Color) {
             maxLines = 1,
             softWrap = false,
         )
+    }
+}
+
+@Composable
+private fun WalkStepLine(
+    step: TransitWalkStep,
+    ink: Color,
+    dim: Color,
+    isCurrentStep: Boolean,
+    isPassedStep: Boolean,
+    accentColor: Color = Color.Unspecified,
+) {
+    val activeAccent = if (accentColor != Color.Unspecified) accentColor else MaterialTheme.colorScheme.primary
+    val textInk = when {
+        isCurrentStep -> ink
+        isPassedStep -> dim.copy(alpha = 0.55f)
+        else -> ink
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .then(
+                if (isCurrentStep) {
+                    Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(activeAccent.copy(alpha = 0.16f))
+                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                } else {
+                    Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                }
+            ),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (isCurrentStep) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(activeAccent))
+        } else {
+            Box(
+                Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(if (isPassedStep) dim.copy(alpha = 0.35f) else dim.copy(alpha = 0.80f))
+            )
+        }
+        Row(
+            Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                step.instruction,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (isCurrentStep) FontWeight.Bold else FontWeight.Normal,
+                color = textInk,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (isCurrentStep) {
+                Text(
+                    "· ${stringResource(R.string.transit_stop_current)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = activeAccent,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+        }
     }
 }
 

@@ -151,4 +151,42 @@ object TransitProgress {
         val end = step.alightStop?.location ?: return false
         return here.distanceTo(end) <= ALERT_M
     }
+
+    /**
+     * Determines which walking sub-step index in [steps] is currently active based on GPS [here].
+     * Returns -1 if [steps] is empty, 0 if [here] is null.
+     */
+    fun activeWalkStepIndex(
+        steps: List<app.vela.core.model.TransitWalkStep>,
+        here: LatLng?,
+        walkFrom: LatLng? = null,
+        walkTo: LatLng? = null,
+    ): Int {
+        if (steps.isEmpty()) return -1
+        if (steps.size == 1 || here == null) return 0
+
+        var bestIdx = 0
+        var bestDist = Double.MAX_VALUE
+
+        for (i in steps.indices) {
+            val start = steps[i].location ?: if (i == 0) walkFrom else null
+            val end = if (i < steps.lastIndex) steps[i + 1].location else walkTo
+
+            val d = if (start != null && end != null) {
+                pointToSegment(here, start, end).first
+            } else if (start != null) {
+                here.distanceTo(start)
+            } else if (end != null) {
+                here.distanceTo(end)
+            } else {
+                Double.MAX_VALUE
+            }
+
+            if (d < bestDist) {
+                bestDist = d
+                bestIdx = i
+            }
+        }
+        return bestIdx
+    }
 }
