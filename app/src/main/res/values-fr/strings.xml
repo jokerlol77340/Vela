@@ -1538,5 +1538,11 @@
         <item quantity="other">Retirer %1$d lieux ?</item>
     </plurals>
     <string name="settings_nav_icon_scale">Taille des pictogrammes sur le trajet</string>
-    <string name="settings_nav_icon_scale_hint">Agrandit les radars, les caméras, les feux tricolores, les panneaux stop, les passages à niveau et les ralentisseurs affichés sur la route.</string>
+    <string name="settings_nav_icon_scale_hint">Choisissez individuellement la taille de chaque pictogramme affiché sur la route pendant la navigation.</string>
+    <string name="settings_nav_icon_speedcam">Radars fixes</string>
+    <string name="settings_nav_icon_flock">Caméras de surveillance</string>
+    <string name="settings_nav_icon_signal">Feux tricolores</string>
+    <string name="settings_nav_icon_stop">Panneaux Stop</string>
+    <string name="settings_nav_icon_railx">Passages à niveau</string>
+    <string name="settings_nav_icon_hump">Ralentisseurs</string>
 </resources>

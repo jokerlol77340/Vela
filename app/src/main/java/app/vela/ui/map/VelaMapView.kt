@@ -2621,12 +2621,19 @@ fun VelaMapView(
     // (re)load and whenever the Settings value changes. Low-density screens (car head units)
     // render the fixed-px bitmaps physically huge - a 0.7x here is the fix that doesn't touch
     // phones (their default stays 1.0).
-    val navIconScale = app.vela.ui.MapPoiPrefs.navIconScale.floatValue
-    LaunchedEffect(styleRef, poiIconScale, poiLabelScale, navIconScale) {
+    val speedcamScale = app.vela.ui.MapPoiPrefs.speedcamScale.floatValue
+    val flockScale = app.vela.ui.MapPoiPrefs.flockScale.floatValue
+    val signalScale = app.vela.ui.MapPoiPrefs.signalScale.floatValue
+    val stopSignScale = app.vela.ui.MapPoiPrefs.stopSignScale.floatValue
+    val railCrossingScale = app.vela.ui.MapPoiPrefs.railCrossingScale.floatValue
+    val speedHumpScale = app.vela.ui.MapPoiPrefs.speedHumpScale.floatValue
+    LaunchedEffect(
+        styleRef, poiIconScale, poiLabelScale,
+        speedcamScale, flockScale, signalScale, stopSignScale, railCrossingScale, speedHumpScale,
+    ) {
         val st = styleRef ?: return@LaunchedEffect
         val sc = poiIconScale
         val lc = poiLabelScale
-        val navSc = poiIconScale * navIconScale
         runCatching {
             st.getLayer(AMBIENT_LAYER)?.setProperties(
                 PropertyFactory.iconSize(
@@ -2662,9 +2669,12 @@ fun VelaMapView(
                 ),
                 PropertyFactory.textSize(10.5f * lc),
             )
-            val controlsScaled = Expression.interpolate(
-                Expression.linear(), Expression.zoom(),
-                Expression.stop(15.5f, 0.98f * navSc), Expression.stop(17f, 1.37f * navSc), Expression.stop(19f, 1.95f * navSc),
+            val controlsScaled = controlsSizeExpression(
+                baseScale = sc,
+                signalScale = signalScale,
+                stopScale = stopSignScale,
+                railxScale = railCrossingScale,
+                humpScale = speedHumpScale,
             )
             st.getLayer(CONTROLS_LAYER)?.setProperties(PropertyFactory.iconSize(controlsScaled))
             st.getLayer(CONTROLS_CLAIM_LAYER)?.setProperties(PropertyFactory.iconSize(controlsScaled))
@@ -2682,17 +2692,26 @@ fun VelaMapView(
             // on screen and a prominent one 77; the list pin was 48 at 1x and 60 at 1.25x, so it read
             // smaller than every icon beside it (issue #618). 1.35x puts its ringed disc at 65.
             st.getLayer(SAVED_LAYER)?.setProperties(PropertyFactory.iconSize(savedPinSize(sc)))
-            val camScaled = Expression.interpolate(
+            val flockSc = sc * flockScale
+            val flockScaled = Expression.interpolate(
                 Expression.linear(), Expression.zoom(),
-                Expression.stop(11f, 0.55f * navSc),
-                Expression.stop(14f, 0.7f * navSc),
-                Expression.stop(17f, 1.0f * navSc),
-                Expression.stop(19f, 1.35f * navSc),
+                Expression.stop(11f, 0.55f * flockSc),
+                Expression.stop(14f, 0.7f * flockSc),
+                Expression.stop(17f, 1.0f * flockSc),
+                Expression.stop(19f, 1.35f * flockSc),
             )
-            st.getLayer(FLOCK_LAYER)?.setProperties(PropertyFactory.iconSize(camScaled))
-            st.getLayer(FLOCK_CLUSTER_LAYER)?.setProperties(PropertyFactory.iconSize(camScaled))
-            st.getLayer(FLOCK_DIR_LAYER)?.setProperties(PropertyFactory.iconSize(camScaled))
-            st.getLayer(SPEEDCAM_LAYER)?.setProperties(PropertyFactory.iconSize(camScaled))
+            st.getLayer(FLOCK_LAYER)?.setProperties(PropertyFactory.iconSize(flockScaled))
+            st.getLayer(FLOCK_CLUSTER_LAYER)?.setProperties(PropertyFactory.iconSize(flockScaled))
+            st.getLayer(FLOCK_DIR_LAYER)?.setProperties(PropertyFactory.iconSize(flockScaled))
+            val speedcamSc = sc * speedcamScale
+            val speedcamScaled = Expression.interpolate(
+                Expression.linear(), Expression.zoom(),
+                Expression.stop(11f, 0.55f * speedcamSc),
+                Expression.stop(14f, 0.7f * speedcamSc),
+                Expression.stop(17f, 1.0f * speedcamSc),
+                Expression.stop(19f, 1.35f * speedcamSc),
+            )
+            st.getLayer(SPEEDCAM_LAYER)?.setProperties(PropertyFactory.iconSize(speedcamScaled))
         }
     }
 
@@ -6368,12 +6387,12 @@ private fun ensureLayers(style: Style, painted: Boolean) {
         // A third bigger than they were (user 2026-09-18, from a drive): a stop sign or a light is
         // something you act on in the next few seconds, and at the old size they read as map dust
         // next to the road shields.
-        val navScInit = app.vela.ui.MapPoiPrefs.navIconScale.floatValue
-        val controlsSize = Expression.interpolate(
-            Expression.linear(), Expression.zoom(),
-            Expression.stop(15.5f, 0.98f * navScInit),
-            Expression.stop(17f, 1.37f * navScInit),
-            Expression.stop(19f, 1.95f * navScInit),
+        val controlsSize = controlsSizeExpression(
+            baseScale = 1f,
+            signalScale = app.vela.ui.MapPoiPrefs.signalScale.floatValue,
+            stopScale = app.vela.ui.MapPoiPrefs.stopSignScale.floatValue,
+            railxScale = app.vela.ui.MapPoiPrefs.railCrossingScale.floatValue,
+            humpScale = app.vela.ui.MapPoiPrefs.speedHumpScale.floatValue,
         )
         // The VISIBLE controls draw ABOVE the route lines and the bridge geometry but BELOW the
         // basemap text and every Vela POI layer. They used to sit at the very BOTTOM of the
@@ -6450,13 +6469,13 @@ PropertyFactory.iconPadding(2f),
     if (style.getImage(FLOCK_DIR_IMG) == null) style.addImage(FLOCK_DIR_IMG, alprConeBitmap())
     if (style.getSource(FLOCK_SRC) == null) {
         style.addSource(GeoJsonSource(FLOCK_SRC, GeoJsonOptions().withMaxZoom(16)))
-        val navScInit = app.vela.ui.MapPoiPrefs.navIconScale.floatValue
+        val flockScInit = app.vela.ui.MapPoiPrefs.flockScale.floatValue
         val flockSize = Expression.interpolate(
             Expression.linear(), Expression.zoom(),
-            Expression.stop(11f, 0.55f * navScInit),
-            Expression.stop(14f, 0.7f * navScInit),
-            Expression.stop(17f, 1.0f * navScInit),
-            Expression.stop(19f, 1.35f * navScInit),
+            Expression.stop(11f, 0.55f * flockScInit),
+            Expression.stop(14f, 0.7f * flockScInit),
+            Expression.stop(17f, 1.0f * flockScInit),
+            Expression.stop(19f, 1.35f * flockScInit),
         )
         val flockLayer =
             SymbolLayer(FLOCK_LAYER, FLOCK_SRC).apply {
@@ -6545,13 +6564,13 @@ PropertyFactory.iconPadding(2f),
     if (style.getImage(SPEEDCAM_IMG) == null) style.addImage(SPEEDCAM_IMG, speedCamBitmap())
     if (style.getSource(SPEEDCAM_SRC) == null) {
         style.addSource(GeoJsonSource(SPEEDCAM_SRC, GeoJsonOptions().withMaxZoom(16)))
-        val navScInit = app.vela.ui.MapPoiPrefs.navIconScale.floatValue
+        val speedcamScInit = app.vela.ui.MapPoiPrefs.speedcamScale.floatValue
         val camSize = Expression.interpolate(
             Expression.linear(), Expression.zoom(),
-            Expression.stop(11f, 0.55f * navScInit),
-            Expression.stop(14f, 0.7f * navScInit),
-            Expression.stop(17f, 1.0f * navScInit),
-            Expression.stop(19f, 1.35f * navScInit),
+            Expression.stop(11f, 0.55f * speedcamScInit),
+            Expression.stop(14f, 0.7f * speedcamScInit),
+            Expression.stop(17f, 1.0f * speedcamScInit),
+            Expression.stop(19f, 1.35f * speedcamScInit),
         )
         val camLayer = SymbolLayer(SPEEDCAM_LAYER, SPEEDCAM_SRC).apply {
             setMinZoom(11f)
@@ -10898,10 +10917,33 @@ internal fun stopSignBitmap(): Bitmap {
     return bmp
 }
 
+private fun controlsSizeExpression(
+    baseScale: Float,
+    signalScale: Float,
+    stopScale: Float,
+    railxScale: Float,
+    humpScale: Float,
+): Expression {
+    fun atZoom(base: Float) = Expression.match(
+        Expression.get("icon"),
+        Expression.literal(base * baseScale * signalScale),
+        Expression.stop(SIGNAL_IMG, base * baseScale * signalScale),
+        Expression.stop(STOP_IMG, base * baseScale * stopScale),
+        Expression.stop(RAILX_IMG, base * baseScale * railxScale),
+        Expression.stop(HUMP_IMG, base * baseScale * humpScale),
+    )
+    return Expression.interpolate(
+        Expression.linear(), Expression.zoom(),
+        Expression.stop(15.5f, atZoom(0.98f)),
+        Expression.stop(17f, atZoom(1.37f)),
+        Expression.stop(19f, atZoom(1.95f)),
+    )
+}
+
 /** Railway level-crossing marker: dark disc (the traffic-light housing color) with a white
  *  crossbuck X - the "tracks cross here" shorthand, deliberately monochrome so it can't be read
  *  as one of the red/amber regulatory signs. Static OSM road aid (2026-08-08). */
-private fun railCrossingBitmap(): Bitmap {
+internal fun railCrossingBitmap(): Bitmap {
     val s = 44
     val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
     val c = Canvas(bmp)
@@ -10920,7 +10962,7 @@ private fun railCrossingBitmap(): Bitmap {
 
 /** Speed-hump marker: white rim, amber warning field, dark bump-on-a-road glyph. Covers OSM
  *  traffic_calming bump/hump/table/cushion - the shapes a driver feels. */
-private fun speedHumpBitmap(): Bitmap {
+internal fun speedHumpBitmap(): Bitmap {
     val s = 44
     val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
     val c = Canvas(bmp)
