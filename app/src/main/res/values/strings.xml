@@ -127,12 +127,12 @@
     <string name="settings_speed_cams">Speed cameras</string>
     <string name="settings_speed_cam_warn">Speed camera alerts</string>
     <string name="settings_speed_cam_warn_hint">Alerts you as you approach a speed camera while navigating. Warning about cameras while driving is restricted in some countries, so this is off unless you turn it on.</string>
-    <string name="settings_speed_cam_nav_card">Heads-up card</string>
-    <string name="settings_speed_cam_nav_card_hint">Shows an on-screen alert card when approaching a speed camera.</string>
-    <string name="settings_speed_cam_nav_voice">Spoken voice alert</string>
+    <string name="settings_speed_cam_nav_card">Speed camera heads-up card</string>
+    <string name="settings_speed_cam_nav_card_hint">Shows an on-screen alert banner when approaching a speed camera on your route.</string>
+    <string name="settings_speed_cam_nav_voice">Speed camera voice alert</string>
     <string name="settings_speed_cam_nav_voice_hint">Says \"Speed camera ahead\" through navigation audio.</string>
     <string name="settings_speed_cam_distance_title">Alert distance</string>
-    <string name="settings_speed_cam_distance_hint">Choose how far in advance to be alerted before reaching the speed camera.</string>
+    <string name="settings_speed_cam_distance_hint">Choose how far in advance to trigger the alert before reaching the camera.</string>
     <string name="settings_speed_cam_dist_auto">Auto (12 s)</string>
     <string name="settings_speed_cam_dist_200">200 m</string>
     <string name="settings_speed_cam_dist_400">400 m</string>
@@ -1560,4 +1560,6 @@
     <string name="settings_theme_amoled_for_dark">Use AMOLED black for dark theme</string>
     <string name="settings_theme_amoled_for_dark_hint">When switching to dark mode, uses true AMOLED black instead of dark gray.</string>
     <string name="settings_theme_amoled_for_nav_hint">When driving at night, uses true AMOLED black instead of dark gray.</string>
+    <string name="transit_step_current">Current</string>
+    <string name="transit_stop_current">Here</string>
 </resources>

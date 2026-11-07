@@ -4,7 +4,9 @@ import app.vela.ui.icons.Sym
 import app.vela.ui.icons.SymOutlined
 
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.scrollBy
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -2731,31 +2733,52 @@ fun TransitNavSheet(
                     HorizontalDivider(color = dim.copy(alpha = 0.2f))
                     Spacer(Modifier.height(10.dp))
 
+                    val stepOffsets = remember(itin) { androidx.compose.runtime.mutableStateMapOf<Int, Int>() }
+                    LaunchedEffect(nav.stepIndex, stepOffsets[nav.stepIndex]) {
+                        val targetY = stepOffsets[nav.stepIndex]
+                        if (targetY != null && nav.stepIndex > 0) {
+                            bodyScroll.animateScrollTo((targetY - 24).coerceAtLeast(0))
+                        }
+                    }
+
                     Column(
                         Modifier
                             .fillMaxWidth()
                             .nestedScroll(nestedConn)
                             .verticalScroll(bodyScroll)
                             .padding(bottom = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(0.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         itin.steps.forEachIndexed { index, s ->
                             val isCurrentGpsStep = !nav.arrived && index == nav.stepIndex
+                            val isPastStep = nav.arrived || index < nav.stepIndex
                             val isFocused = focusedLeg == index
                             val stepColor = s.line?.let { parseHexColor(it.colorHex) } ?: MaterialTheme.colorScheme.primary
                             val isWalk = s.line == null
 
-                            val barColor = if (isWalk) dim.copy(alpha = 0.35f) else stepColor.copy(alpha = 0.85f)
+                            val barColor = when {
+                                isPastStep -> dim.copy(alpha = 0.25f)
+                                isWalk -> dim.copy(alpha = 0.40f)
+                                else -> stepColor.copy(alpha = 0.85f)
+                            }
                             Row(
                                 Modifier
                                     .fillMaxWidth()
+                                    .onGloballyPositioned { coords ->
+                                        stepOffsets[index] = coords.positionInParent().y.toInt()
+                                    }
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(
                                         when {
-                                            isFocused -> MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                                            isCurrentGpsStep -> SheetPalette.row(dark)
+                                            isFocused -> MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                                            isCurrentGpsStep -> stepColor.copy(alpha = if (dark) 0.14f else 0.10f)
                                             else -> Color.Transparent
                                         }
+                                    )
+                                    .then(
+                                        if (isCurrentGpsStep) {
+                                            Modifier.border(1.5.dp, stepColor.copy(alpha = 0.65f), RoundedCornerShape(12.dp))
+                                        } else Modifier
                                     )
                                     .clickable {
                                         focusedLeg = if (focusedLeg == index) null else index
@@ -2778,14 +2801,28 @@ fun TransitNavSheet(
                             ) {
                                 // Left Google Maps-style timeline rail (dot at top; vertical bar drawn full-height behind)
                                 Box(
-                                    contentAlignment = Alignment.TopCenter,
-                                    modifier = Modifier.width(24.dp).padding(top = 2.dp),
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.width(24.dp).padding(top = 1.dp),
                                 ) {
+                                    if (isCurrentGpsStep) {
+                                        Box(
+                                            Modifier
+                                                .size(20.dp)
+                                                .clip(CircleShape)
+                                                .background(stepColor.copy(alpha = 0.30f)),
+                                        )
+                                    }
                                     Box(
                                         Modifier
                                             .size(if (isWalk) 10.dp else 14.dp)
                                             .clip(CircleShape)
-                                            .background(if (isWalk) dim.copy(alpha = 0.5f) else stepColor),
+                                            .background(
+                                                when {
+                                                    isPastStep -> dim.copy(alpha = 0.35f)
+                                                    isWalk -> if (isCurrentGpsStep) stepColor else dim.copy(alpha = 0.5f)
+                                                    else -> stepColor
+                                                }
+                                            ),
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         if (!isWalk) {
@@ -2797,7 +2834,15 @@ fun TransitNavSheet(
                                 Spacer(Modifier.width(8.dp))
 
                                 Box(Modifier.weight(1f)) {
-                                    TransitStepRow(s, ink, dim, onWalkDirections)
+                                    TransitStepRow(
+                                        s = s,
+                                        ink = ink,
+                                        dim = dim,
+                                        onWalkDirections = onWalkDirections,
+                                        isCurrentStep = isCurrentGpsStep,
+                                        isPastStep = isPastStep,
+                                        userLocation = if (isCurrentGpsStep) nav.userLocation else null,
+                                    )
                                 }
                             }
                         }
@@ -3047,7 +3092,16 @@ private fun TransitRow(t: TransitItinerary, nowSec: Long, ink: Color, dim: Color
 /** One leg in the expanded drill-down: a mode glyph + the line/"Walk" title and a
  *  times·duration·distance subtitle ("Bus 42B / 5:48 AM – 6:41 AM · 53 min"). */
 @Composable
-private fun TransitStepRow(s: TransitStep, ink: Color, dim: Color, onWalkDirections: suspend (LatLng, LatLng) -> List<String> = { _, _ -> emptyList() }) {
+private fun TransitStepRow(
+    s: TransitStep,
+    ink: Color,
+    dim: Color,
+    onWalkDirections: suspend (LatLng, LatLng) -> List<String> = { _, _ -> emptyList() },
+    isCurrentStep: Boolean = false,
+    isPastStep: Boolean = false,
+    userLocation: LatLng? = null,
+) {
+    val effectiveInk = if (isPastStep) dim else ink
     // Walk leg — "Walk · 11 min · 0.5 mi", tap to expand turn-by-turn walking directions
     // (fetched on demand via the walk router between this leg's endpoints).
     if (s.line == null) {
@@ -3059,14 +3113,29 @@ private fun TransitStepRow(s: TransitStep, ink: Color, dim: Color, onWalkDirecti
             LaunchedEffect(from, to) { steps = onWalkDirections(from!!, to!!) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
-            Icon(transitModeIcon(s.mode), null, tint = dim, modifier = Modifier.padding(top = 2.dp).size(18.dp))
+            Icon(
+                transitModeIcon(s.mode),
+                null,
+                tint = if (isCurrentStep) MaterialTheme.colorScheme.primary else dim,
+                modifier = Modifier.padding(top = 2.dp).size(18.dp),
+            )
             Column(Modifier.fillMaxWidth()) {
                 Row(
                     Modifier.then(if (canExpand) Modifier.dpadHighlight(RoundedCornerShape(8.dp)).clickable { open = !open } else Modifier),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.place_walk), style = MaterialTheme.typography.bodyMedium, color = ink)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text(
+                                stringResource(R.string.place_walk),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (isCurrentStep) FontWeight.SemiBold else FontWeight.Normal,
+                                color = effectiveInk,
+                            )
+                            if (isCurrentStep) {
+                                CurrentStepBadge(MaterialTheme.colorScheme.primary)
+                            }
+                        }
                         val sub = listOfNotNull(s.durationText, s.distanceText).joinToString("  ·  ")
                         if (sub.isNotEmpty()) Text(sub, style = MaterialTheme.typography.bodySmall, color = dim)
                     }
@@ -3093,16 +3162,52 @@ private fun TransitStepRow(s: TransitStep, ink: Color, dim: Color, onWalkDirecti
         return
     }
     val line = s.line ?: return // unreachable (walk branch returned) — re-narrows the cross-module type
-    val lineColor = parseHexColor(line.colorHex) ?: dim
+    val lineColor = parseHexColor(line.colorHex) ?: MaterialTheme.colorScheme.primary
+    val (currentStopName, passedStopNames) = remember(s, userLocation, isCurrentStep) {
+        if (isCurrentStep) app.vela.core.nav.TransitProgress.activeStopInfo(s, userLocation) else (null to emptySet())
+    }
     var stopsOpen by remember { mutableStateOf(false) }
+    // Auto-expand intermediate stops when the user's live GPS position is at an intermediate stop on this leg
+    LaunchedEffect(currentStopName) {
+        if (currentStopName != null && s.intermediateStops.any { it.name == currentStopName }) {
+            stopsOpen = true
+        }
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
-        Icon(transitModeIcon(s.mode), null, tint = lineColor, modifier = Modifier.padding(top = 2.dp).size(18.dp))
+        Icon(
+            transitModeIcon(s.mode),
+            null,
+            tint = if (isPastStep) dim.copy(alpha = 0.55f) else lineColor,
+            modifier = Modifier.padding(top = 2.dp).size(18.dp),
+        )
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 LinePill(line)
-                s.headsign?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = ink, maxLines = 2) }
+                s.headsign?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = effectiveInk,
+                        maxLines = 2,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                }
+                if (isCurrentStep) {
+                    CurrentStepBadge(lineColor)
+                }
             }
-            s.boardStop?.let { StopLine(it, ink, dim, emphasize = true, delay = s.delayText) }
+            s.boardStop?.let { stop ->
+                StopLine(
+                    stop = stop,
+                    ink = effectiveInk,
+                    dim = dim,
+                    emphasize = true,
+                    delay = s.delayText,
+                    isCurrentStop = stop.name == currentStopName,
+                    isPassedStop = isPastStep || stop.name in passedStopNames,
+                    accentColor = lineColor,
+                )
+            }
             val rideLabel = listOfNotNull(
                 s.durationText,
                 s.numStops?.let { pluralStringResource(R.plurals.place_transit_stops, it, it) },
@@ -3122,36 +3227,128 @@ private fun TransitStepRow(s: TransitStep, ink: Color, dim: Color, onWalkDirecti
                 }
                 if (stopsOpen) {
                     Column(Modifier.padding(start = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        s.intermediateStops.forEach { StopLine(it, ink, dim, emphasize = false) }
+                        s.intermediateStops.forEach { stop ->
+                            StopLine(
+                                stop = stop,
+                                ink = effectiveInk,
+                                dim = dim,
+                                emphasize = false,
+                                isCurrentStop = stop.name == currentStopName,
+                                isPassedStop = isPastStep || stop.name in passedStopNames,
+                                accentColor = lineColor,
+                            )
+                        }
                     }
                 }
             } else if (rideLabel.isNotEmpty()) {
                 Text(rideLabel, style = MaterialTheme.typography.bodySmall, color = dim)
             }
-            s.alightStop?.let { StopLine(it, ink, dim, emphasize = true) }
+            s.alightStop?.let { stop ->
+                StopLine(
+                    stop = stop,
+                    ink = effectiveInk,
+                    dim = dim,
+                    emphasize = true,
+                    isCurrentStop = stop.name == currentStopName,
+                    isPassedStop = isPastStep || stop.name in passedStopNames,
+                    accentColor = lineColor,
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun CurrentStepBadge(color: Color) {
+    Row(
+        Modifier
+            .clip(CircleShape)
+            .background(color.copy(alpha = 0.20f))
+            .padding(horizontal = 7.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Box(Modifier.size(6.dp).clip(CircleShape).background(color))
+        Text(
+            stringResource(R.string.transit_step_current),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = color,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 
 /** One stop in the transit drill-down: its call time, name, and (for board/alight) the agency
  *  stop code + any real-time delay. Emphasized for board/alight, lighter for the intermediate list. */
 @Composable
-private fun StopLine(stop: TransitStopTime, ink: Color, dim: Color, emphasize: Boolean, delay: String? = null) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+private fun StopLine(
+    stop: TransitStopTime,
+    ink: Color,
+    dim: Color,
+    emphasize: Boolean,
+    delay: String? = null,
+    isCurrentStop: Boolean = false,
+    isPassedStop: Boolean = false,
+    accentColor: Color = Color.Unspecified,
+) {
+    val activeAccent = if (accentColor != Color.Unspecified) accentColor else MaterialTheme.colorScheme.primary
+    val textInk = when {
+        isCurrentStop -> ink
+        isPassedStop -> dim.copy(alpha = 0.6f)
+        else -> ink
+    }
+    Row(
+        Modifier
+            .then(
+                if (isCurrentStop) {
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(activeAccent.copy(alpha = 0.16f))
+                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                } else Modifier
+            ),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         stop.timeText?.let {
             Text(
                 it,
                 style = MaterialTheme.typography.labelSmall,
-                color = if (delay != null) SheetPalette.TrafficRed else dim,
+                fontWeight = if (isCurrentStop) FontWeight.Bold else FontWeight.Normal,
+                color = when {
+                    delay != null -> SheetPalette.TrafficRed
+                    isCurrentStop -> activeAccent
+                    isPassedStop -> dim.copy(alpha = 0.55f)
+                    else -> dim
+                },
                 modifier = Modifier.widthIn(min = 54.dp),
             )
         }
-        Column {
-            Text(
-                stop.name,
-                style = if (emphasize) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
-                color = ink,
-            )
+        if (isCurrentStop) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(activeAccent))
+        }
+        Column(Modifier.weight(1f, fill = false)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    stop.name,
+                    style = if (emphasize || isCurrentStop) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+                    fontWeight = if (isCurrentStop) FontWeight.Bold else if (emphasize) FontWeight.SemiBold else FontWeight.Normal,
+                    color = textInk,
+                )
+                if (isCurrentStop) {
+                    Text(
+                        "· ${stringResource(R.string.transit_stop_current)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = activeAccent,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                }
+            }
             val meta = listOfNotNull(
                 delay,
                 stop.scheduledText?.takeIf { emphasize },

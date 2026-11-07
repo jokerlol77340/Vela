@@ -85,6 +85,7 @@ data class TransitNavState(
     val itinerary: TransitItinerary,
     val stepIndex: Int = 0,
     val arrived: Boolean = false,
+    val userLocation: LatLng? = null,
 ) {
     val step: TransitStep? get() = itinerary.steps.getOrNull(stepIndex)
     val isLastStep: Boolean get() = stepIndex >= itinerary.steps.lastIndex
@@ -7216,13 +7217,21 @@ class MapViewModel @Inject constructor(
         transitLegArmed = false
         app.vela.ui.TransitExpanded.navCollapsed.value = false
         app.vela.ui.TransitExpanded.navFocusedLeg.value = null
-        _state.update { it.copy(transitNav = TransitNavState(itin, 0), directionsOpen = false, selected = null) }
+        val myLoc = _state.value.myLocation
+        val initialStep = app.vela.core.nav.TransitProgress.locateStepIndex(itin.steps, myLoc, 0)
+        _state.update {
+            it.copy(
+                transitNav = TransitNavState(itin, stepIndex = initialStep, userLocation = myLoc),
+                directionsOpen = false,
+                selected = null,
+            )
+        }
         startLocation()
-        itin.steps.firstOrNull()?.let { voice.speak(transitStepSpoken(it), interrupt = true) }
+        itin.steps.getOrNull(initialStep)?.let { voice.speak(transitStepSpoken(it), interrupt = true) }
         // The notification that carries the trip with the phone in a pocket (issue #880).
         transitAlertedLeg = -1
         app.vela.service.TransitGuide.onEnd = { endTransitNav() }
-        publishTransitNotice(_state.value.myLocation)
+        publishTransitNotice(myLoc)
         app.vela.service.TransitGuide.start(appContext)
     }
 
@@ -7301,16 +7310,31 @@ class MapViewModel @Inject constructor(
     }
 
     /** Auto-advance transit guidance when GPS reaches the current leg's end (board/alight stop or the
-     *  leg's walk destination). Latched: the leg must first be ARMED by being >TRANSIT_ARM_M from its
-     *  end, then advances on entering the TRANSIT_ARRIVE_M radius — one advance per leg, no cascade. */
+     *  leg's walk destination), or when GPS locates the rider on another leg along the itinerary. */
     private fun maybeAdvanceTransitNav(here: LatLng) {
         val tn = _state.value.transitNav ?: return
         if (tn.arrived) return
         val step = tn.step ?: return
-        val end = (if (step.line != null) step.alightStop?.location else step.walkTo) ?: return
-        val d = here.distanceTo(end)
-        if (d > TRANSIT_ARM_M) transitLegArmed = true
-        else if (transitLegArmed && d < TRANSIT_ARRIVE_M) advanceTransitNav()
+        val end = (if (step.line != null) step.alightStop?.location else step.walkTo)
+        if (end != null) {
+            val d = here.distanceTo(end)
+            if (d > TRANSIT_ARM_M) transitLegArmed = true
+            else if (transitLegArmed && d < TRANSIT_ARRIVE_M) {
+                _state.update { it.copy(transitNav = tn.copy(userLocation = here)) }
+                advanceTransitNav()
+                return
+            }
+        }
+        val detectedIdx = app.vela.core.nav.TransitProgress.locateStepIndex(tn.itinerary.steps, here, tn.stepIndex)
+        if (detectedIdx != tn.stepIndex) {
+            transitLegArmed = false
+            _state.update { it.copy(transitNav = tn.copy(stepIndex = detectedIdx, userLocation = here)) }
+            if (detectedIdx > tn.stepIndex) {
+                tn.itinerary.steps.getOrNull(detectedIdx)?.let { voice.speak(transitStepSpoken(it), interrupt = true) }
+            }
+        } else if (tn.userLocation == null || tn.userLocation.distanceTo(here) >= 8.0) {
+            _state.update { it.copy(transitNav = tn.copy(userLocation = here)) }
+        }
     }
 
     /** The spoken cue for a transit leg. */
