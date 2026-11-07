@@ -1252,7 +1252,10 @@ class MapViewModel @Inject constructor(
      *  lands after the user has started looking around used to yank the camera back and zoom in
      *  (issue #362, and the same complaint on the 4a; 2026-09-13). */
     @Volatile private var userPannedSinceLaunch = false
-    fun onUserPanned() { userPannedSinceLaunch = true }
+    fun onUserPanned() {
+        userPannedSinceLaunch = true
+        if (_state.value.transitNav != null) app.vela.ui.TransitExpanded.navPanTick.intValue++
+    }
 
     // --- where the map opens (app.vela.ui.StartView) -------------------------------------------
     private var startDecided = false
@@ -7211,6 +7214,8 @@ class MapViewModel @Inject constructor(
     fun startTransitNav(itin: TransitItinerary) {
         if (itin.steps.isEmpty()) return
         transitLegArmed = false
+        app.vela.ui.TransitExpanded.navCollapsed.value = false
+        app.vela.ui.TransitExpanded.navFocusedLeg.value = null
         _state.update { it.copy(transitNav = TransitNavState(itin, 0), directionsOpen = false, selected = null) }
         startLocation()
         itin.steps.firstOrNull()?.let { voice.speak(transitStepSpoken(it), interrupt = true) }
@@ -7244,6 +7249,8 @@ class MapViewModel @Inject constructor(
     }
 
     fun endTransitNav() {
+        app.vela.ui.TransitExpanded.navCollapsed.value = false
+        app.vela.ui.TransitExpanded.navFocusedLeg.value = null
         _state.update { it.copy(transitNav = null) }
         app.vela.service.TransitGuide.end(appContext)
     }

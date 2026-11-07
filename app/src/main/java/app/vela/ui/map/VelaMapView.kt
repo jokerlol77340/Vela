@@ -1392,11 +1392,13 @@ fun VelaMapView(
     var lastInsetPx by remember { mutableStateOf(if (startFramed) 0 else -1) }
     var lastFittedRouteKey by remember { mutableStateOf<Int?>(null) }
     var lastFittedTransitKey by remember { mutableStateOf<Int?>(null) }
-    // Whole-trip coords for the chooser fit; during transit NAV the fit narrows to the guided
-    // leg's own coords (falling back to the whole trip when a leg carries no geometry).
-    val transitPrevCoords = remember(transitPreview, transitNavLeg) {
+    // Whole-trip coords for the chooser fit and by default during transit NAV; narrows to a single
+    // leg only when the user explicitly taps that leg in the transit timeline.
+    val focusedTransitLeg = if (transitNavLeg != null) app.vela.ui.TransitExpanded.navFocusedLeg.value else null
+    val transitNavCollapsed = transitNavLeg != null && app.vela.ui.TransitExpanded.navCollapsed.value
+    val transitPrevCoords = remember(transitPreview, focusedTransitLeg) {
         val all = transitPreviewCoords(transitPreview)
-        val leg = transitNavLeg?.let { transitLegCoords(transitPreview, it) }
+        val leg = focusedTransitLeg?.let { transitLegCoords(transitPreview, it) }
         if (!leg.isNullOrEmpty()) leg else all
     }
     val transitFitCoords = transitPrevCoords.ifEmpty { tripEndpoints }
@@ -5361,7 +5363,8 @@ fun VelaMapView(
         // every camera move below respects it. Reset to 0 when no sheet is up.
         // Bottom (portrait sheet) and left (landscape side panel) fold into ONE key so a change
         // on either axis re-applies padding; appearance on either axis re-frames.
-        val insetKey = cameraBottomInsetPx * 31 + cameraLeftInsetPx
+        val effectiveBottomInsetPx = if (transitNavCollapsed) (cameraBottomInsetPx * 0.22f).toInt() else cameraBottomInsetPx
+        val insetKey = effectiveBottomInsetPx * 31 + cameraLeftInsetPx
         if (insetKey != lastInsetPx) {
             // Only re-frame when the sheet APPEARS or grows (lift the pin above it). When it
             // shrinks to 0 (sheet closed) we must NOT null lastCameraTarget — doing so let the
@@ -5371,7 +5374,7 @@ fun VelaMapView(
             lastInsetPx = insetKey
             // While Street View owns the camera padding (top inset), don't clobber it here -
             // the SV close path restores the sheet padding itself.
-            if (svPose == null) map.setPadding(cameraLeftInsetPx, 0, 0, cameraBottomInsetPx)
+            if (svPose == null) map.setPadding(cameraLeftInsetPx, 0, 0, effectiveBottomInsetPx)
             // Not while a route is up: the route fit re-frames for the new inset itself, and a
             // nulled target made the NEXT frame fly to the selected place, canceling that fit
             // (the chooser's "Compare routes" swap landed zoomed in on the destination, 2026-09-17).
