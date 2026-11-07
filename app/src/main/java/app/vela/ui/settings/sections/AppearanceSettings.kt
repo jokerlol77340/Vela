@@ -286,8 +286,9 @@ internal fun AppearanceSettingsScreen(vm: MapViewModel, onBack: () -> Unit) {
                         )
                     }
                     FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        val navIconFocus = remember { List(5) { FocusRequester() } }
-                        listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f).forEachIndexed { i, f ->
+                        val scales = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.25f, 2.5f, 2.75f)
+                        val navIconFocus = remember { List(scales.size) { FocusRequester() } }
+                        scales.forEachIndexed { i, f ->
                             FilterChip(
                                 selected = kotlin.math.abs(row.currentScale - f) < 0.01f,
                                 onClick = { row.onScaleChange(f) },

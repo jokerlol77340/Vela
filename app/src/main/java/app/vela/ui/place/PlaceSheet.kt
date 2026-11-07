@@ -173,6 +173,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.draw.blur
@@ -2646,6 +2647,8 @@ fun TransitNavSheet(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = ink,
+                            maxLines = 1,
+                            softWrap = false,
                         )
                         if (range.isNotEmpty()) {
                             itin.durationText?.let { dur ->
@@ -2654,6 +2657,8 @@ fun TransitNavSheet(
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    softWrap = false,
                                 )
                             }
                         }
@@ -2680,7 +2685,7 @@ fun TransitNavSheet(
                                 LinePill(line)
                             }
                             if (itin.lines.size > 5) {
-                                Text("+${itin.lines.size - 5}", style = MaterialTheme.typography.labelMedium, color = dim)
+                                Text("+${itin.lines.size - 5}", style = MaterialTheme.typography.labelMedium, color = dim, maxLines = 1, softWrap = false)
                             }
                         }
                         countdown?.let { cd ->
@@ -2688,20 +2693,10 @@ fun TransitNavSheet(
                                 text = if (itin.lines.isNotEmpty()) "· $cd" else cd,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (live) SheetPalette.TrafficGreen else dim,
+                                maxLines = 1,
+                                softWrap = false,
                             )
                         }
-                    }
-                }
-
-                if (focusedLeg != null) {
-                    TextButton(
-                        onClick = { focusedLeg = null },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.place_show_steps),
-                            style = MaterialTheme.typography.labelMedium,
-                        )
                     }
                 }
 
@@ -2750,6 +2745,7 @@ fun TransitNavSheet(
                             val stepColor = s.line?.let { parseHexColor(it.colorHex) } ?: MaterialTheme.colorScheme.primary
                             val isWalk = s.line == null
 
+                            val barColor = if (isWalk) dim.copy(alpha = 0.35f) else stepColor.copy(alpha = 0.85f)
                             Row(
                                 Modifier
                                     .fillMaxWidth()
@@ -2764,12 +2760,25 @@ fun TransitNavSheet(
                                     .clickable {
                                         focusedLeg = if (focusedLeg == index) null else index
                                     }
+                                    .drawBehind {
+                                        val centerX = 20.dp.toPx()
+                                        val dotDiameter = (if (isWalk) 10.dp else 14.dp).toPx()
+                                        val topY = 10.dp.toPx() + dotDiameter + 4.dp.toPx()
+                                        val bottomY = (size.height - 4.dp.toPx()).coerceAtLeast(topY + 8.dp.toPx())
+                                        val barW = (if (isWalk) 2.dp else 4.dp).toPx()
+                                        drawRoundRect(
+                                            color = barColor,
+                                            topLeft = Offset(centerX - barW / 2f, topY),
+                                            size = androidx.compose.ui.geometry.Size(barW, bottomY - topY),
+                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(barW / 2f, barW / 2f),
+                                        )
+                                    }
                                     .padding(horizontal = 8.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.Top,
                             ) {
-                                // Left Google Maps-style timeline rail (dot + vertical bar)
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                // Left Google Maps-style timeline rail (dot at top; vertical bar drawn full-height behind)
+                                Box(
+                                    contentAlignment = Alignment.TopCenter,
                                     modifier = Modifier.width(24.dp).padding(top = 2.dp),
                                 ) {
                                     Box(
@@ -2783,14 +2792,6 @@ fun TransitNavSheet(
                                             Box(Modifier.size(6.dp).clip(CircleShape).background(if (dark) SheetDark else SheetLight))
                                         }
                                     }
-                                    Box(
-                                        Modifier
-                                            .width(if (isWalk) 2.dp else 4.dp)
-                                            .height(42.dp)
-                                            .padding(vertical = 3.dp)
-                                            .clip(RoundedCornerShape(2.dp))
-                                            .background(if (isWalk) dim.copy(alpha = 0.35f) else stepColor.copy(alpha = 0.75f))
-                                    )
                                 }
 
                                 Spacer(Modifier.width(8.dp))
