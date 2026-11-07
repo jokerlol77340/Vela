@@ -1548,4 +1548,16 @@
     <string name="settings_theme_amoled_for_dark">Utiliser le noir AMOLED pour le mode sombre</string>
     <string name="settings_theme_amoled_for_dark_hint">Lors du passage au thème sombre, utilise le noir pur AMOLED plutôt que le gris foncé.</string>
     <string name="settings_theme_amoled_for_nav_hint">Pendant la conduite de nuit, utilise le noir pur AMOLED plutôt que le gris foncé.</string>
+    <string name="settings_speed_cam_nav_card">Bannière d\'alerte à l\'écran</string>
+    <string name="settings_speed_cam_nav_card_hint">Affiche une carte d\'avertissement à l\'écran à l\'approche d\'un radar.</string>
+    <string name="settings_speed_cam_nav_voice">Alerte vocale</string>
+    <string name="settings_speed_cam_nav_voice_hint">Annonce « Radar devant » via le guidage vocal.</string>
+    <string name="settings_speed_cam_distance_title">Distance d\'alerte</string>
+    <string name="settings_speed_cam_distance_hint">Choisissez la distance à l\'avance à laquelle déclencher l\'alerte avant d\'atteindre le radar.</string>
+    <string name="settings_speed_cam_dist_auto">Auto (12 s)</string>
+    <string name="settings_speed_cam_dist_200">200 m</string>
+    <string name="settings_speed_cam_dist_400">400 m</string>
+    <string name="settings_speed_cam_dist_600">600 m</string>
+    <string name="settings_speed_cam_dist_800">800 m</string>
+    <string name="settings_speed_cam_dist_1000">1 km</string>
 </resources>

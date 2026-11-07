@@ -44,6 +44,7 @@ import app.vela.ui.settings.ToggleRow
 
 /** Surveillance and speed cameras: the map markers and every alert about them, one group
  *  (moved from Map to Navigation, 2026-09-17: they are driving alerts first). */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun CameraSettingsGroup() {
     val context = LocalContext.current
@@ -63,9 +64,7 @@ internal fun CameraSettingsGroup() {
             hint = stringResource(R.string.settings_speed_cams_hint),
             leading = { app.vela.ui.SpeedCameraBadge() },
         )
-        // The spoken warning is nested: it only means anything once the cameras are being tracked,
-        // and it is its own opt-in because being spoken to is a different ask from seeing a marker
-        // (and is restricted in some countries).
+        // Radar / speed camera alerts: master toggle, visual heads-up, spoken line, and customizable alert distance
         if (app.vela.ui.SpeedCams.on.value) {
             ToggleRow(
                 label = stringResource(R.string.settings_speed_cam_warn),
@@ -73,6 +72,54 @@ internal fun CameraSettingsGroup() {
                 onCheckedChange = { app.vela.ui.SpeedCamWarn.set(context, it) },
                 hint = stringResource(R.string.settings_speed_cam_warn_hint),
             )
+            if (app.vela.ui.SpeedCamWarn.on.value) {
+                ToggleRow(
+                    label = stringResource(R.string.settings_speed_cam_nav_card),
+                    checked = app.vela.ui.SpeedCamWarn.card.value,
+                    onCheckedChange = { app.vela.ui.SpeedCamWarn.setCard(context, it) },
+                    hint = stringResource(R.string.settings_speed_cam_nav_card_hint),
+                )
+                ToggleRow(
+                    label = stringResource(R.string.settings_speed_cam_nav_voice),
+                    checked = app.vela.ui.SpeedCamWarn.voice.value,
+                    onCheckedChange = { app.vela.ui.SpeedCamWarn.setVoice(context, it) },
+                    hint = stringResource(R.string.settings_speed_cam_nav_voice_hint),
+                )
+                androidx.compose.foundation.layout.Column(
+                    Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.settings_speed_cam_distance_title),
+                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
+                    val distances = listOf(
+                        0 to R.string.settings_speed_cam_dist_auto,
+                        200 to R.string.settings_speed_cam_dist_200,
+                        400 to R.string.settings_speed_cam_dist_400,
+                        600 to R.string.settings_speed_cam_dist_600,
+                        800 to R.string.settings_speed_cam_dist_800,
+                        1000 to R.string.settings_speed_cam_dist_1000,
+                    )
+                    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        val distFocus = remember { List(distances.size) { FocusRequester() } }
+                        val curDist = app.vela.ui.SpeedCamWarn.distanceMeters.intValue
+                        distances.forEachIndexed { i, (meters, labelRes) ->
+                            FilterChip(
+                                selected = curDist == meters,
+                                onClick = { app.vela.ui.SpeedCamWarn.setDistanceMeters(context, meters) },
+                                label = { Text(stringResource(labelRes)) },
+                                shape = androidx.compose.foundation.shape.CircleShape,
+                                modifier = Modifier
+                                    .dpadHighlight(androidx.compose.foundation.shape.CircleShape)
+                                    .dpadRowSibling(distFocus, i),
+                            )
+                        }
+                    }
+                    Hint(stringResource(R.string.settings_speed_cam_distance_hint))
+                }
+            }
         }
         GroupDivider()
         ToggleRow(
