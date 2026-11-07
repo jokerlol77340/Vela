@@ -1537,4 +1537,6 @@
         <item quantity="one">Retirer %1$d lieu ?</item>
         <item quantity="other">Retirer %1$d lieux ?</item>
     </plurals>
+    <string name="settings_nav_icon_scale">Taille des pictogrammes sur le trajet</string>
+    <string name="settings_nav_icon_scale_hint">Agrandit les radars, les caméras, les feux tricolores, les panneaux stop, les passages à niveau et les ralentisseurs affichés sur la route.</string>
 </resources>

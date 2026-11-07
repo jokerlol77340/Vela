@@ -25,6 +25,9 @@ object MapPoiPrefs {
     val showTransit = mutableStateOf(true)
     val showCivic = mutableStateOf(true)
     val iconScale = mutableFloatStateOf(1.0f)
+    /** Multiplier for route/navigation pictograms (speed cameras/radars, surveillance cameras,
+     *  traffic lights, stop signs, rail crossings, speed humps). */
+    val navIconScale = mutableFloatStateOf(1.0f)
     /** Where the businesses on the browse map come from, one of [SOURCE_OPEN] (the Overture places
      *  layer where a region file covers the view, Google only on tap, works offline), [SOURCE_GOOGLE]
      *  (the ambient fan-out on every pan, nothing offline) or [SOURCE_BOTH] (the open layer draws the
@@ -59,6 +62,7 @@ object MapPoiPrefs {
         showTransit.value = p.getBoolean(KEY_TRANSIT, true)
         showCivic.value = p.getBoolean(KEY_CIVIC, true)
         iconScale.floatValue = p.getFloat(KEY_SCALE, 1.0f)
+        navIconScale.floatValue = p.getFloat(KEY_NAV_ICON_SCALE, 1.0f)
         explicitSource = p.getString(KEY_PLACES_SOURCE, null)
         placesSource.value = explicitSource ?: remoteDefault
         placesWithDownloads.value = p.getBoolean(KEY_PLACES_WITH_DOWNLOADS, true)
@@ -129,11 +133,17 @@ object MapPoiPrefs {
         prefs(context).edit().putFloat(KEY_SCALE, value).apply()
     }
 
+    fun setNavIconScale(context: Context, value: Float) {
+        navIconScale.floatValue = value
+        prefs(context).edit().putFloat(KEY_NAV_ICON_SCALE, value).apply()
+    }
+
     private fun prefs(c: Context) = c.getSharedPreferences("vela_settings", Context.MODE_PRIVATE)
     private const val KEY_POIS = "map_show_pois"
     private const val KEY_TRANSIT = "map_show_transit_stops"
     private const val KEY_CIVIC = "map_show_civic_pois"
     private const val KEY_SCALE = "map_poi_icon_scale"
+    private const val KEY_NAV_ICON_SCALE = "map_nav_icon_scale"
     private const val KEY_PLACES_SOURCE = "map_places_source"
     private const val KEY_PLACES_WITH_DOWNLOADS = "offline_places_with_downloads"
     private const val KEY_LOOKUP_TAPPED = "map_places_google_lookup"

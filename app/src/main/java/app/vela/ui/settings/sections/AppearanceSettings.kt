@@ -7,12 +7,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalContext
@@ -202,6 +204,39 @@ internal fun AppearanceSettingsScreen(vm: MapViewModel, onBack: () -> Unit) {
                         )
                     }
                 }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        // Route/navigation pictogram size: scales speed cameras (radars), surveillance cameras,
+        // traffic lights, stop signs, level crossings and speed humps along the route.
+        SettingsGroup(title = stringResource(R.string.settings_nav_icon_scale)) {
+            androidx.compose.foundation.layout.Column(Modifier.padding(horizontal = 16.dp)) {
+                val currentNavScale = app.vela.ui.MapPoiPrefs.navIconScale.floatValue
+                androidx.compose.foundation.layout.Row(
+                    modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    val previewDp = (24f * currentNavScale).dp
+                    app.vela.ui.SpeedCameraBadge(Modifier.size(previewDp))
+                    app.vela.ui.PlateCameraBadge(Modifier.size(previewDp))
+                }
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val navIconFocus = remember { List(5) { FocusRequester() } }
+                    listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f).forEachIndexed { i, f ->
+                        FilterChip(
+                            selected = kotlin.math.abs(currentNavScale - f) < 0.01f,
+                            onClick = { app.vela.ui.MapPoiPrefs.setNavIconScale(context, f) },
+                            label = { Text("${(f * 100).toInt()}%") },
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            modifier = Modifier
+                                .dpadHighlight(androidx.compose.foundation.shape.CircleShape)
+                                .dpadRowSibling(navIconFocus, i),
+                        )
+                    }
+                }
+                Hint(stringResource(R.string.settings_nav_icon_scale_hint))
             }
         }
 

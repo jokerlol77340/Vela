@@ -1537,4 +1537,6 @@
     <string name="place_avoid_short_ferries">Ferries</string>
     <string name="place_avoid_short_cameras">Cameras</string>
     <string name="trip_shortcut_themed">Match themed icons</string>
+    <string name="settings_nav_icon_scale">Route pictogram size</string>
+    <string name="settings_nav_icon_scale_hint">Enlarges speed cameras, surveillance cameras, traffic lights, stop signs, level crossings and speed humps along your route.</string>
 </resources>
