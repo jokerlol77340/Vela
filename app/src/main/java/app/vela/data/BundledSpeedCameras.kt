@@ -254,16 +254,39 @@ object BundledSpeedCameras {
         return out
     }
 
-    /** Speed cameras within [nearMeters] of [polyline]. */
+    /** Speed cameras within [nearMeters] of [polyline] using fast route corridor cells. */
     fun along(polyline: List<LatLng>, nearMeters: Double = 150.0): List<SpeedCamera> {
         if (!loaded || polyline.size < 2) return emptyList()
-        val degPad = nearMeters / 111_000.0 * 1.5
-        var s = 90.0; var n = -90.0; var w = 180.0; var e = -180.0
-        for (p in polyline) {
-            if (p.lat < s) s = p.lat; if (p.lat > n) n = p.lat
-            if (p.lng < w) w = p.lng; if (p.lng > e) e = p.lng
+        val cellKeys = HashSet<Long>()
+        val stepDeg = CELL * 0.4
+        for (i in 0 until polyline.size - 1) {
+            val a = polyline[i]; val b = polyline[i + 1]
+            val distLat = b.lat - a.lat; val distLng = b.lng - a.lng
+            val dist = Math.hypot(distLat, distLng)
+            val steps = maxOf(1, Math.ceil(dist / stepDeg).toInt())
+            for (sIdx in 0..steps) {
+                val t = sIdx.toDouble() / steps
+                val la = a.lat + t * distLat
+                val lo = a.lng + t * distLng
+                val r = rowOf(la); val c = rowOf(lo)
+                for (dr in -1L..1L) {
+                    for (dc in -1L..1L) {
+                        cellKeys.add(key(r + dr, c + dc))
+                    }
+                }
+            }
         }
-        val candidates = inBox(s - degPad, w - degPad, n + degPad, e + degPad)
+        val candidates = ArrayList<SpeedCamera>()
+        val seen = HashSet<Int>()
+        for (k in cellKeys) {
+            grid[k]?.let { bucket ->
+                for (idx in bucket) {
+                    if (seen.add(idx)) {
+                        candidates.add(SpeedCamera(LatLng(lat[idx], lng[idx])))
+                    }
+                }
+            }
+        }
         if (candidates.isEmpty()) return emptyList()
         return candidates.filter { cam -> nearPolyline(cam.loc.lat, cam.loc.lng, polyline, nearMeters) }
     }

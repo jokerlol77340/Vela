@@ -403,33 +403,45 @@ object FlockCameras {
      *  [app.vela.core.nav.CameraFacing]. */
     fun along(polyline: List<LatLng>, meters: Double = 45.0): List<AlprCamera> {
         if (!loaded || polyline.size < 2) return emptyList()
-        val pad = 0.01
-        val r0 = rowOf(polyline.minOf { it.lat } - pad); val r1 = rowOf(polyline.maxOf { it.lat } + pad)
-        val c0 = rowOf(polyline.minOf { it.lng } - pad); val c1 = rowOf(polyline.maxOf { it.lng } + pad)
-        val out = ArrayList<AlprCamera>()
-        var r = r0
-        while (r <= r1) {
-            var c = c0
-            while (c <= c1) {
-                grid[key(r, c)]?.let { bucket ->
-                    for (i in bucket) {
-                        val p = LatLng(lat[i], lng[i])
-                        val d = dir.getOrElse(i) { Float.NaN }
-                        val facing = if (d.isNaN()) null else d.toDouble()
-                        val isAlpr = isAlprArr.getOrElse(i) { true }
-                        val onRoute = if (isAlpr) {
-                            app.vela.core.nav.CameraFacing.onRoute(polyline, p, facing, meters)
-                        } else {
-                            app.vela.core.data.OverpassAlprCameras.nearPolyline(p, polyline, meters.coerceAtLeast(50.0))
-                        }
-                        if (onRoute) {
-                            out.add(AlprCamera(p, op[i], dirStr(i), isAlpr = isAlpr))
-                        }
+        val cellKeys = HashSet<Long>()
+        val stepDeg = CELL * 0.4
+        for (i in 0 until polyline.size - 1) {
+            val a = polyline[i]; val b = polyline[i + 1]
+            val distLat = b.lat - a.lat; val distLng = b.lng - a.lng
+            val dist = Math.hypot(distLat, distLng)
+            val steps = maxOf(1, Math.ceil(dist / stepDeg).toInt())
+            for (sIdx in 0..steps) {
+                val t = sIdx.toDouble() / steps
+                val la = a.lat + t * distLat
+                val lo = a.lng + t * distLng
+                val r = rowOf(la); val c = rowOf(lo)
+                for (dr in -1L..1L) {
+                    for (dc in -1L..1L) {
+                        cellKeys.add(key(r + dr, c + dc))
                     }
                 }
-                c++
             }
-            r++
+        }
+        val out = ArrayList<AlprCamera>()
+        val seen = HashSet<Int>()
+        for (k in cellKeys) {
+            grid[k]?.let { bucket ->
+                for (i in bucket) {
+                    if (!seen.add(i)) continue
+                    val p = LatLng(lat[i], lng[i])
+                    val d = dir.getOrElse(i) { Float.NaN }
+                    val facing = if (d.isNaN()) null else d.toDouble()
+                    val isAlpr = isAlprArr.getOrElse(i) { true }
+                    val onRoute = if (isAlpr) {
+                        app.vela.core.nav.CameraFacing.onRoute(polyline, p, facing, meters)
+                    } else {
+                        app.vela.core.data.OverpassAlprCameras.nearPolyline(p, polyline, meters.coerceAtLeast(50.0))
+                    }
+                    if (onRoute) {
+                        out.add(AlprCamera(p, op[i], dirStr(i), isAlpr = isAlpr))
+                    }
+                }
+            }
         }
         return out
     }

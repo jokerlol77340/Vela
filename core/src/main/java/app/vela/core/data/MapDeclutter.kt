@@ -34,11 +34,12 @@ object MapDeclutter {
 
     fun <T> cluster(items: List<T>, radiusM: Double, loc: (T) -> LatLng): List<Cluster<T>> {
         if (items.isEmpty()) return emptyList()
+        val r2 = radiusM * radiusM
         if (items.size < 50) {
             val clusters = mutableListOf<Cluster<T>>()
             for (item in items) {
                 val p = loc(item)
-                val hit = clusters.firstOrNull { approxDistanceM(it.centroid, p) <= radiusM }
+                val hit = clusters.firstOrNull { approxDistanceSqM(it.centroid, p) <= r2 }
                 if (hit != null) hit.add(item, p) else clusters.add(Cluster(item, p))
             }
             return clusters
@@ -57,7 +58,7 @@ object MapDeclutter {
                 for (dc in -1..1) {
                     val bucket = grid[cellKey(r + dr, c + dc)] ?: continue
                     for (candidate in bucket) {
-                        if (approxDistanceM(candidate.centroid, p) <= radiusM) {
+                        if (approxDistanceSqM(candidate.centroid, p) <= r2) {
                             hit = candidate
                             break
                         }
@@ -77,10 +78,14 @@ object MapDeclutter {
         return clusters
     }
 
-    /** Equirectangular approximation - exact enough at the tens-of-meters radii this is used at. */
-    internal fun approxDistanceM(a: LatLng, b: LatLng): Double {
+    /** Equirectangular approximation squared - avoids costly sqrt in clustering inner loops. */
+    internal fun approxDistanceSqM(a: LatLng, b: LatLng): Double {
         val latM = (a.lat - b.lat) * 111_320.0
-        val lngM = (a.lng - b.lng) * 111_320.0 * kotlin.math.cos(Math.toRadians((a.lat + b.lat) / 2))
-        return kotlin.math.sqrt(latM * latM + lngM * lngM)
+        val lngM = (a.lng - b.lng) * 111_320.0 * kotlin.math.cos(Math.toRadians((a.lat + b.lat) * 0.5))
+        return latM * latM + lngM * lngM
     }
+
+    /** Equirectangular approximation - exact enough at the tens-of-meters radii this is used at. */
+    internal fun approxDistanceM(a: LatLng, b: LatLng): Double =
+        kotlin.math.sqrt(approxDistanceSqM(a, b))
 }

@@ -11129,7 +11129,7 @@ private fun applyData(
     // set (one counted badge per cluster + one cone per head) and the plain badge per cluster
     // drawn below street zoom. The route "passes N cameras" count stays on raw nodes on purpose;
     // only the DRAWN badges merge.
-    if (flockCameras != lastAppliedFlock || trafficControls !== lastFlockControls) {
+    if (flockCameras !== lastAppliedFlock || trafficControls !== lastFlockControls) {
         val (alprCams, survCams) = flockCameras.partition { it.isAlpr }
         val alprClusters = app.vela.core.data.MapDeclutter.cluster(alprCams, FLOCK_CLUSTER_M) { it.loc }
         val survClusters = app.vela.core.data.MapDeclutter.cluster(survCams, FLOCK_CLUSTER_M) { it.loc }
@@ -11143,7 +11143,13 @@ private fun applyData(
             val iconName = if (isAlpr) FLOCK_IMG else SURV_CAM_IMG
             val coneName = if (isAlpr) FLOCK_DIR_IMG else SURV_DIR_IMG
             for (c in clusters) {
-                val isNudged = lights.any { it.loc.distanceTo(c.centroid) < FLOCK_NUDGE_M }
+                val isNudged = if (lights.isEmpty()) false else lights.any {
+                    val dLat = Math.abs(it.loc.lat - c.centroid.lat)
+                    if (dLat > 0.0003) return@any false
+                    val dLng = Math.abs(it.loc.lng - c.centroid.lng)
+                    if (dLng > 0.0004) return@any false
+                    it.loc.distanceTo(c.centroid) < FLOCK_NUDGE_M
+                }
                 feats += Feature.fromGeometry(Point.fromLngLat(c.centroid.lng, c.centroid.lat)).apply {
                     addNumberProperty(FLOCK_COUNT_PROP, c.members.size)
                     addStringProperty("icon", iconName)
@@ -11176,7 +11182,7 @@ private fun applyData(
 
     // Waze community live route alerts
     val wazeAlerts = app.vela.ui.WazeAlertsPref.filteredRouteAlerts
-    if (wazeAlerts != lastAppliedWazeAlerts) {
+    if (wazeAlerts !== lastAppliedWazeAlerts) {
         val wazeFeats = wazeAlerts.map { alert ->
             Feature.fromGeometry(Point.fromLngLat(alert.loc.lng, alert.loc.lat)).apply {
                 val icon = when (alert.kind) {
@@ -11192,7 +11198,7 @@ private fun applyData(
     }
 
     // Fixed radar cameras -> icon features (identity-gated like the rest). Empty clears the source.
-    if (speedCameras != lastAppliedSpeedCams) {
+    if (speedCameras !== lastAppliedSpeedCams) {
         style.getSourceAs<GeoJsonSource>(SPEEDCAM_SRC)?.setGeoJson(
             FeatureCollection.fromFeatures(
                 speedCameras.map { Feature.fromGeometry(Point.fromLngLat(it.loc.lng, it.loc.lat)) },
@@ -11202,7 +11208,7 @@ private fun applyData(
     }
 
     // Canonical GTFS stops (Transitous). Feature index -> the VM's stop list for the tap handler.
-    if (transitStops != lastAppliedTransitStops) {
+    if (transitStops !== lastAppliedTransitStops) {
         val stopsFc = FeatureCollection.fromFeatures(
             transitStops.mapIndexed { i, st ->
                 Feature.fromGeometry(Point.fromLngLat(st.lon, st.lat)).apply {
