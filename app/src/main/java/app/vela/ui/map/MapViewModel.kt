@@ -5939,7 +5939,7 @@ class MapViewModel @Inject constructor(
         app.vela.ui.ParkingActions.arrivedByCar = { _state.value.travelMode == TravelMode.DRIVE }
         app.vela.ui.ParkingActions.parkedAt = { _state.value.parkedAtMillis }
     }
-    init { app.vela.ui.SavedActions.rename = ::renamePlace; app.vela.ui.ShapeActions.delete = ::deleteOpenedShape; app.vela.ui.ShapeActions.edit = ::editOpenedShape; app.vela.ui.RouteActions.pinTrip = ::pinTripShortcut; app.vela.ui.RouteActions.modeKey = { app.vela.ui.TripShortcut.defaultIcon(_state.value.travelMode) }; app.vela.ui.RouteActions.camerasChanged = { if (_state.value.directionsOpen) route(_state.value.travelMode) }; app.vela.ui.RouteActions.wazeChanged = { refreshWazeOnActiveRoute(_state.value.activeRoute) } }
+    init { app.vela.ui.SavedActions.rename = ::renamePlace; app.vela.ui.ShapeActions.delete = ::deleteOpenedShape; app.vela.ui.ShapeActions.edit = ::editOpenedShape; app.vela.ui.RouteActions.pinTrip = ::pinTripShortcut; app.vela.ui.RouteActions.modeKey = { app.vela.ui.TripShortcut.defaultIcon(_state.value.travelMode) }; app.vela.ui.RouteActions.camerasChanged = { if (_state.value.directionsOpen) route(_state.value.travelMode) else refreshFlockNow() }; app.vela.ui.RouteActions.wazeChanged = { refreshWazeOnActiveRoute(_state.value.activeRoute) }; app.vela.ui.Flock.refreshNow = ::refreshFlockNow }
 
     // ---- Viewed places, kept for offline (PlaceCache; the storage and the setting are from PR #658) ----
     private fun placeCacheDir(): java.io.File = java.io.File(appContext.filesDir, "placecache")
@@ -6911,9 +6911,22 @@ class MapViewModel @Inject constructor(
             _state.update { it.copy(flockOnRoute = counts) }
             val eta = { r: Route -> r.durationInTrafficSeconds ?: r.durationSeconds }
             val eta0 = eta(cur[0])
-            val cap = minOf(eta0 * 0.25, 600.0)
+            val detourMode = app.vela.ui.FlockDetour.mode.value
+            val isTotalAvoidance = detourMode == app.vela.ui.CameraAvoidDetourMode.TOTAL_AVOIDANCE
+            val cap = if (isTotalAvoidance) maxOf(eta0 * 5.0, 7200.0) else minOf(eta0 * 0.25, 600.0)
             if (counts.any { it > 0 }) {
-                val best = app.vela.core.nav.CameraDetour.choose(cur.indices.map { app.vela.core.nav.CameraDetour.Option(counts[it], eta(cur[it])) }, eta0, cap)
+                val best = if (isTotalAvoidance) {
+                    val zeroCamIdx = counts.indices.firstOrNull { counts[it] == 0 }
+                    zeroCamIdx ?: app.vela.core.nav.CameraDetour.choose(
+                        cur.indices.map { app.vela.core.nav.CameraDetour.Option(counts[it], eta(cur[it])) },
+                        eta0, cap
+                    )
+                } else {
+                    app.vela.core.nav.CameraDetour.choose(
+                        cur.indices.map { app.vela.core.nav.CameraDetour.Option(counts[it], eta(cur[it])) },
+                        eta0, cap
+                    )
+                }
                 if (best != null) {
                     val order = listOf(best) + counts.indices.filter { it != best }
                     _state.update {
@@ -6925,24 +6938,31 @@ class MapViewModel @Inject constructor(
                     selectRoute(0)
                 }
             }
-            if (app.vela.ui.FlockDetour.on.value && (mode == TravelMode.DRIVE || mode == TravelMode.WALK || mode == TravelMode.BICYCLE)) {
+            if (detourMode != app.vela.ui.CameraAvoidDetourMode.DISABLED && (mode == TravelMode.DRIVE || mode == TravelMode.WALK || mode == TravelMode.BICYCLE)) {
                 val routesNow = _state.value.routes
                 val countsNow = _state.value.flockOnRoute
                 if (routesNow.size == countsNow.size && countsNow.any { it > 0 }) {
-                    val budget = intArrayOf(app.vela.core.nav.CameraDetour.MAX_REQUESTS)
+                    val reqBudget = if (isTotalAvoidance) 12 else app.vela.core.nav.CameraDetour.MAX_REQUESTS
+                    val budget = intArrayOf(reqBudget)
                     val tried = ArrayList<LatLng>()
                     val results = ArrayList<Pair<Route, Int>>()
                     for (i in routesNow.indices) {
                         if (budget[0] <= 0) break
                         if (countsNow[i] <= 0 || routesNow[i].detourPlan.isNotEmpty()) continue
-                        val r = tryCameraDetour(routesNow[i], countsNow[i], eta0, cap, epoch, origin, dest, mode, targets, liveAlprPool, liveSpeedPool, stops, avoidTolls, avoidHighways, avoidFerries, budget, tried)
+                        val r = tryCameraDetour(routesNow[i], countsNow[i], eta0, cap, epoch, origin, dest, mode, targets, liveAlprPool, liveSpeedPool, stops, avoidTolls, avoidHighways, avoidFerries, budget, tried, isTotalAvoidance)
                         if (routesEpoch != epoch) return@launch
                         if (r != null) results += r
                     }
                     if (results.isNotEmpty()) {
                         val options = listOf(app.vela.core.nav.CameraDetour.Option(countsNow[0], eta(routesNow[0]))) +
                             results.map { (r, n) -> app.vela.core.nav.CameraDetour.Option(n, eta(r)) }
-                        val pick = app.vela.core.nav.CameraDetour.choose(options, eta0, cap)
+                        val pick = if (isTotalAvoidance) {
+                            val zeroIdx = options.indices.filter { options[it].cameras == 0 }.minByOrNull { options[it].etaS }
+                            if (zeroIdx != null && zeroIdx != 0) zeroIdx
+                            else app.vela.core.nav.CameraDetour.choose(options, eta0, cap)
+                        } else {
+                            app.vela.core.nav.CameraDetour.choose(options, eta0, cap)
+                        }
                         android.util.Log.i("VelaFlockRoute", "detour pick: ${results.size} result(s), cameras ${results.map { it.second }}, leader ${countsNow[0]} -> ${pick?.let { options[it].cameras } ?: countsNow[0]}")
                         if (pick != null && routesEpoch == epoch) {
                             val (kept, n) = results[pick - 1]
@@ -6993,14 +7013,16 @@ class MapViewModel @Inject constructor(
         stops: List<LatLng>,
         avoidTolls: Boolean, avoidHighways: Boolean, avoidFerries: Boolean,
         budget: IntArray, tried: MutableList<LatLng>,
+        isTotalAvoidance: Boolean = false,
     ): Pair<Route, Int>? {
         val eta = { r: Route -> r.durationInTrafficSeconds ?: r.durationSeconds }
         val poly = route.polyline
         val cum = app.vela.core.nav.RouteProjection.cumulative(poly)
+        val maxClusters = if (isTotalAvoidance) 8 else app.vela.core.nav.CameraDetour.MAX_CLUSTERS
         val cands = withContext(Dispatchers.Default) {
             val hits = camerasMatchingAvoidOnPoly(poly, mode, targets, liveAlprPool, liveSpeedPool)
             val along = hits.mapNotNull { loc -> app.vela.core.nav.RouteProjection.alongMeters(poly, cum, loc, 60.0) }
-            app.vela.core.nav.CameraDetour.untried(app.vela.core.nav.CameraDetour.candidates(poly, along), tried)
+            app.vela.core.nav.CameraDetour.untried(app.vela.core.nav.CameraDetour.candidates(poly, along, maxClusters = maxClusters), tried)
         }
         if (cands.isEmpty()) return null
         val stopAt = stops.map { app.vela.core.nav.RouteProjection.alongMeters(poly, cum, it, 250.0) to it }
@@ -7008,10 +7030,11 @@ class MapViewModel @Inject constructor(
         var best: Route? = null
         var bestCount = routeCount
         var requests = 0
+        val maxReqPerRoute = if (isTotalAvoidance) 8 else app.vela.core.nav.CameraDetour.MAX_REQUESTS_PER_ROUTE
         outer@ for (c in cands) {
             tried += c.at
             for (via in listOf(c.left, c.right)) {
-                if (requests >= app.vela.core.nav.CameraDetour.MAX_REQUESTS_PER_ROUTE || budget[0] <= 0) break@outer
+                if (requests >= maxReqPerRoute || budget[0] <= 0) break@outer
                 val trial = vias + (c.atM to via)
                 val plan = app.vela.core.nav.CameraDetour.mergePlan(stopAt, trial)
                 requests++
@@ -7023,11 +7046,21 @@ class MapViewModel @Inject constructor(
                     camerasMatchingAvoidOnPoly(r.polyline, mode, targets, liveAlprPool, liveSpeedPool).size
                 }
                 val extra = eta(r) - eta0
-                if (n < bestCount && extra <= cap) {
-                    vias = trial
-                    best = r.copy(detourPlan = plan)
-                    bestCount = n
-                    break
+                if (isTotalAvoidance) {
+                    if (n < bestCount) {
+                        vias = trial
+                        best = r.copy(detourPlan = plan)
+                        bestCount = n
+                        if (n == 0) break@outer
+                        break
+                    }
+                } else {
+                    if (n < bestCount && extra <= cap) {
+                        vias = trial
+                        best = r.copy(detourPlan = plan)
+                        bestCount = n
+                        break
+                    }
                 }
             }
         }
@@ -9824,6 +9857,7 @@ class MapViewModel @Inject constructor(
     /** Re-fetch (or clear) the Flock layer for the current viewport - called when the toggle flips,
      *  so turning it on shows cameras without needing a pan first. */
     fun refreshFlockNow() {
+        flockBox = null
         lastFlockViewport?.let { refreshFlock(it[0], it[1], it[2], it[3], it[4]) }
     }
 
@@ -10292,7 +10326,7 @@ class MapViewModel @Inject constructor(
                 _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(capFlock(bundled, s, n, w, e))) }
             }
             delay(300)
-            val live = if ((east - west) <= 1.2 && (north - south) <= 1.2) {
+            val live = if ((east - west) <= 2.2 && (north - south) <= 2.2) {
                 withContext(Dispatchers.IO) {
                     runCatching { app.vela.core.data.OverpassAlprCameras.fetchInBox(http, s, w, n, e) }.getOrNull()
                 }

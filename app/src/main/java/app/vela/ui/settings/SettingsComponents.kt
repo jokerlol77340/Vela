@@ -108,7 +108,13 @@ internal fun CollapsibleSectionTitle(text: String, expanded: Boolean, modifier: 
 }
 
 @Composable
-internal fun SelectableRow(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun SelectableRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    hint: String? = null,
+) {
     Row(
         modifier.fillMaxWidth().settingsAnchor(label).dpadHighlight(DpadShape(10.dp)).dpadClickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -119,7 +125,16 @@ internal fun SelectableRow(label: String, selected: Boolean, onClick: () -> Unit
         // 2026-07-08) - the Material "clickable row + indicator" pattern.
         RadioButton(selected = selected, onClick = null)
         androidx.compose.foundation.layout.Spacer(Modifier.width(14.dp))
-        Text(label, style = MaterialTheme.typography.bodyLarge)
+        androidx.compose.foundation.layout.Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            if (hint != null) {
+                Text(
+                    hint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

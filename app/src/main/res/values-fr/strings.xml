@@ -1627,4 +1627,15 @@
     <string name="waze_badge_police">Badge signalement police</string>
     <string name="waze_badge_hazard">Badge signalement danger</string>
     <string name="waze_badge_accident">Badge signalement accident</string>
+    <string name="settings_flock_detour_mode_title">Intensité de l\'évitement</string>
+    <string name="settings_flock_detour_disabled">Désactivé</string>
+    <string name="settings_flock_detour_disabled_hint">Suit l\'itinéraire standard sans chercher de détour</string>
+    <string name="settings_flock_detour_cams_and_radars">Essayer les rues voisines pour contourner les caméras et les radars</string>
+    <string name="settings_flock_detour_radars_only">Essayer les rues voisines pour contourner les radars</string>
+    <string name="settings_flock_detour_cams_only">Essayer les rues voisines pour contourner les caméras</string>
+    <string name="settings_flock_detour_alpr_only">Essayer les rues voisines pour contourner les caméras lectrices</string>
+    <string name="settings_flock_detour_surv_only">Essayer les rues voisines pour contourner les caméras de surveillance</string>
+    <string name="settings_flock_detour_moderate_hint">Tente de légers détours par les rues parallèles dans une limite de temps raisonnable</string>
+    <string name="settings_flock_detour_total">Évitement total</string>
+    <string name="settings_flock_detour_total_hint">Recherche un itinéraire ne passant par aucune caméra ou radar sélectionné, même si le trajet est long et tortueux</string>
 </resources>

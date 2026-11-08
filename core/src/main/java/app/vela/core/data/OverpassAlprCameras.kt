@@ -67,7 +67,7 @@ object OverpassAlprCameras {
         // lat/lon, so the parser dropped every camera (no coordinates) and the layer drew nothing.
         // `out body` prints id, lat, lon AND tags - what we need to place the marker + read operator.
         val query = "[out:json][timeout:25];" +
-            "(node[\"surveillance:type\"~\"ALPR|ANPR\",i]$box;node[\"camera:type\"~\"ALPR|ANPR\",i]$box;node[\"man_made\"=\"surveillance\"][\"surveillance\"!=\"indoor\"]$box;);out body $limit;"
+            "(node[\"surveillance:type\"~\"ALPR|ANPR\",i]$box;node[\"camera:type\"~\"ALPR|ANPR\",i]$box;node[\"man_made\"=\"surveillance\"]$box;);out body $limit;"
         // Failover across mirrors: a 504 from the primary overpass-api.de (common under load) used to fail
         // the whole fetch and silently blank the layer. run() returns null only when EVERY endpoint fails.
         return OverpassEndpoints.run(slow(http), query) { body ->
@@ -79,6 +79,11 @@ object OverpassAlprCameras {
             parsed.elements.mapNotNull { n ->
                 val lat = n.lat ?: return@mapNotNull null
                 val lng = n.lon ?: return@mapNotNull null
+                val surv = n.tags?.get("surveillance")
+                val indoor = n.tags?.get("indoor")
+                if (surv?.equals("indoor", ignoreCase = true) == true || indoor?.equals("yes", ignoreCase = true) == true) {
+                    return@mapNotNull null
+                }
                 // Real DeFlock nodes tag the vendor as `manufacturer` ("Flock Safety"), not `operator`
                 // (usually the agency, often absent) - fall back to it so the camera shows who runs it.
                 val op = (n.tags?.get("operator") ?: n.tags?.get("manufacturer")).orEmpty()

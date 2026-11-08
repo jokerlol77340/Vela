@@ -155,14 +155,34 @@ internal fun CameraSettingsGroup() {
             )
         }
         if (app.vela.ui.FlockRouteAlert.on.value) {
-            ToggleRow(
-                label = stringResource(R.string.settings_flock_detour),
-                checked = app.vela.ui.FlockDetour.on.value,
-                onCheckedChange = {
-                    app.vela.ui.FlockDetour.set(context, it)
+            GroupDivider()
+            val curMode = app.vela.ui.FlockDetour.mode.value
+            SelectableRow(
+                label = stringResource(R.string.settings_flock_detour_disabled),
+                selected = curMode == app.vela.ui.CameraAvoidDetourMode.DISABLED,
+                onClick = {
+                    app.vela.ui.FlockDetour.setMode(context, app.vela.ui.CameraAvoidDetourMode.DISABLED)
                     app.vela.ui.RouteActions.camerasChanged?.invoke()
                 },
-                hint = stringResource(R.string.settings_flock_detour_hint),
+                hint = stringResource(R.string.settings_flock_detour_disabled_hint),
+            )
+            SelectableRow(
+                label = app.vela.ui.FlockDetour.dynamicModerateLabel(context),
+                selected = curMode == app.vela.ui.CameraAvoidDetourMode.MODERATE,
+                onClick = {
+                    app.vela.ui.FlockDetour.setMode(context, app.vela.ui.CameraAvoidDetourMode.MODERATE)
+                    app.vela.ui.RouteActions.camerasChanged?.invoke()
+                },
+                hint = stringResource(R.string.settings_flock_detour_moderate_hint),
+            )
+            SelectableRow(
+                label = stringResource(R.string.settings_flock_detour_total),
+                selected = curMode == app.vela.ui.CameraAvoidDetourMode.TOTAL_AVOIDANCE,
+                onClick = {
+                    app.vela.ui.FlockDetour.setMode(context, app.vela.ui.CameraAvoidDetourMode.TOTAL_AVOIDANCE)
+                    app.vela.ui.RouteActions.camerasChanged?.invoke()
+                },
+                hint = stringResource(R.string.settings_flock_detour_total_hint),
             )
         }
     }

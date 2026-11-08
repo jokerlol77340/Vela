@@ -1627,4 +1627,15 @@
     <string name="waze_badge_police">Police report badge</string>
     <string name="waze_badge_hazard">Hazard report badge</string>
     <string name="waze_badge_accident">Accident report badge</string>
+    <string name="settings_flock_detour_mode_title">Avoidance intensity</string>
+    <string name="settings_flock_detour_disabled">Disabled</string>
+    <string name="settings_flock_detour_disabled_hint">Follows standard route without seeking detours</string>
+    <string name="settings_flock_detour_cams_and_radars">Try side streets to bypass cameras and radars</string>
+    <string name="settings_flock_detour_radars_only">Try side streets to bypass radars</string>
+    <string name="settings_flock_detour_cams_only">Try side streets to bypass cameras</string>
+    <string name="settings_flock_detour_alpr_only">Try side streets to bypass plate-reading cameras</string>
+    <string name="settings_flock_detour_surv_only">Try side streets to bypass surveillance cameras</string>
+    <string name="settings_flock_detour_moderate_hint">Attempts light detours via parallel streets within a reasonable time limit</string>
+    <string name="settings_flock_detour_total">Total avoidance</string>
+    <string name="settings_flock_detour_total_hint">Finds a route passing through zero cameras or radars, even if the trip is long and winding</string>
 </resources>

@@ -12,6 +12,7 @@ object Flock {
     val on = mutableStateOf(true)
     val showAlpr = mutableStateOf(true)
     val showSurveillance = mutableStateOf(true)
+    var refreshNow: (() -> Unit)? = null
 
     fun init(context: Context) {
         val p = prefs(context)
@@ -30,6 +31,7 @@ object Flock {
             .putBoolean(KEY_ALPR, value)
             .putBoolean(KEY_SURV, value)
             .apply()
+        refreshNow?.invoke()
     }
 
     fun setShowAlpr(context: Context, value: Boolean) {
@@ -39,6 +41,7 @@ object Flock {
             .putBoolean(KEY_ALPR, value)
             .putBoolean(KEY, on.value)
             .apply()
+        refreshNow?.invoke()
     }
 
     fun setShowSurveillance(context: Context, value: Boolean) {
@@ -48,6 +51,7 @@ object Flock {
             .putBoolean(KEY_SURV, value)
             .putBoolean(KEY, on.value)
             .apply()
+        refreshNow?.invoke()
     }
 
     fun filterEnabled(cameras: List<AlprCamera>): List<AlprCamera> {
