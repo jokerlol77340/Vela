@@ -32,6 +32,7 @@ import java.util.zip.GZIPInputStream
 object FlockCameras {
     private const val BUNDLED = "flock_cameras.bin"
     private const val BUNDLED_VER = "flock_cameras_version.txt"
+    private const val BUNDLED_SURV = "surveillance_cameras.bin"
     private const val CELL = 0.1 // grid cell size in degrees (~11 km) for the bucket index
 
     @Volatile private var loaded = false
@@ -41,6 +42,7 @@ object FlockCameras {
     // Camera FACING in degrees clockwise from north (the 2026-07-21 4th TSV column); NaN when the
     // node is untagged or the file predates the column - 3-column datasets keep decoding.
     private var dir = FloatArray(0)
+    private var isAlprArr = BooleanArray(0)
     private val grid = HashMap<Long, MutableList<Int>>()
 
     val isLoaded: Boolean get() = loaded
@@ -57,6 +59,7 @@ object FlockCameras {
     private fun dir(context: Context) = File(context.filesDir, "flock").apply { mkdirs() }
     private fun downloadedBin(context: Context) = File(dir(context), "cameras.bin")
     private fun downloadedVer(context: Context) = File(dir(context), "version.txt")
+    private fun liveSurvBin(context: Context) = File(dir(context), "live_surveillance.bin")
 
     private fun bundledVersion(context: Context): Int =
         runCatching { context.assets.open(BUNDLED_VER).bufferedReader().use { it.readText() }.trim().toInt() }
@@ -73,64 +76,160 @@ object FlockCameras {
         maxOf(downloadedVersion(context), bundledVersion(context))
 
     /**
-     * Parse the newest available file once, off the main thread. Safe to call repeatedly (a loaded call
-     * no-ops). NEWEST WINS BY VERSION, not by mere presence: an app update can ship a bundled floor
-     * fresher than an old hosted download (this is exactly how the 4-column direction data rolled out),
-     * and preferring any existing download served the stale 3-column file - the camera facing cones
-     * showed off the Overpass fallback at launch, then vanished when this loaded (device report,
-     * 2026-07-23). A download older than the bundled floor is deleted so refresh() comparisons and the
-     * next launch stay consistent.
+     * Parse both ALPR and surveillance datasets once, off the main thread. Safe to call repeatedly.
      */
     suspend fun ensureLoaded(context: Context) {
         if (loaded) return
         withContext(Dispatchers.IO) {
             if (loaded) return@withContext
-            val dl = downloadedBin(context)
-            val useDownload = downloadedVersion(context) >= bundledVersion(context) && dl.exists()
-            if (!useDownload && dl.exists()) {
-                runCatching { dl.delete(); downloadedVer(context).delete() }
-            }
-            val stream = if (useDownload) runCatching { dl.inputStream() }.getOrNull()
-                else runCatching { context.assets.open(BUNDLED) }.getOrNull()
-            if (stream != null) runCatching { loadFrom(stream) }
+            loadAll(context)
         }
     }
 
-    /** Build the arrays + index from a gzipped-TSV stream and publish them (never leaves `loaded` false once set). */
-    private fun loadFrom(raw: InputStream) {
-        val las = ArrayList<Double>(130_000)
-        val los = ArrayList<Double>(130_000)
-        val ops = ArrayList<String>(130_000)
-        val dirs = ArrayList<Float>(130_000)
-        val intern = HashMap<String, String>() // operator column is highly repetitive - intern it
+    private fun loadAll(context: Context) {
+        val dl = downloadedBin(context)
+        val useDownload = downloadedVersion(context) >= bundledVersion(context) && dl.exists()
+        if (!useDownload && dl.exists()) {
+            runCatching { dl.delete(); downloadedVer(context).delete() }
+        }
+        val alprStream = if (useDownload) runCatching { dl.inputStream() }.getOrNull()
+            else runCatching { context.assets.open(BUNDLED) }.getOrNull()
+
+        val survStream = runCatching { context.assets.open(BUNDLED_SURV) }.getOrNull()
+        val liveSurv = liveSurvBin(context).takeIf { it.exists() }?.let { runCatching { it.inputStream() }.getOrNull() }
+
+        val las = ArrayList<Double>(220_000)
+        val los = ArrayList<Double>(220_000)
+        val ops = ArrayList<String>(220_000)
+        val dirs = ArrayList<Float>(220_000)
+        val alprs = ArrayList<Boolean>(220_000)
+        val intern = HashMap<String, String>()
+
+        // 1. Load ALPR cameras
+        if (alprStream != null) {
+            runCatching {
+                parseInto(alprStream, true, las, los, ops, dirs, alprs, intern)
+            }
+        }
+
+        // 2. Load bundled surveillance cameras (France + Paris intra-muros)
+        if (survStream != null) {
+            runCatching {
+                parseInto(survStream, false, las, los, ops, dirs, alprs, intern)
+            }
+        }
+
+        // 3. Load extra live surveillance cameras cached on disk
+        if (liveSurv != null) {
+            runCatching {
+                parseInto(liveSurv, false, las, los, ops, dirs, alprs, intern)
+            }
+        }
+
+        val g = HashMap<Long, MutableList<Int>>()
+        for (i in las.indices) g.getOrPut(key(rowOf(las[i]), rowOf(los[i]))) { ArrayList() }.add(i)
+
+        lat = las.toDoubleArray()
+        lng = los.toDoubleArray()
+        op = ops.toTypedArray()
+        dir = dirs.toFloatArray()
+        val ab = BooleanArray(alprs.size)
+        for (i in alprs.indices) ab[i] = alprs[i]
+        isAlprArr = ab
+        grid.clear()
+        grid.putAll(g)
+        loaded = true
+    }
+
+    private fun parseInto(
+        raw: InputStream,
+        isAlprDataset: Boolean,
+        las: ArrayList<Double>,
+        los: ArrayList<Double>,
+        ops: ArrayList<String>,
+        dirs: ArrayList<Float>,
+        alprs: ArrayList<Boolean>,
+        intern: HashMap<String, String>,
+    ) {
         raw.use { r ->
-            GZIPInputStream(r).bufferedReader().useLines { lines ->
+            GZIPInputStream(r).bufferedReader(Charsets.UTF_8).useLines { lines ->
                 for (line in lines) {
                     val t1 = line.indexOf('\t'); if (t1 <= 0) continue
                     val t2 = line.indexOf('\t', t1 + 1); if (t2 < 0) continue
                     val la = line.substring(0, t1).toDoubleOrNull() ?: continue
                     val lo = line.substring(t1 + 1, t2).toDoubleOrNull() ?: continue
-                    // Optional 4th column: facing degrees. A 3-column file (pre-2026-07-21 bundled
-                    // or hosted data) has no third tab - the whole rest is the operator, dir = NaN.
                     val t3 = line.indexOf('\t', t2 + 1)
                     val o: String
                     val dg: Float
-                    if (t3 < 0) { o = line.substring(t2 + 1); dg = Float.NaN }
-                    else {
+                    var itemIsAlpr = isAlprDataset
+                    if (t3 < 0) {
+                        o = line.substring(t2 + 1)
+                        dg = Float.NaN
+                    } else {
                         o = line.substring(t2 + 1, t3)
-                        dg = line.substring(t3 + 1).toFloatOrNull() ?: Float.NaN
+                        val t4 = line.indexOf('\t', t3 + 1)
+                        if (t4 < 0) {
+                            dg = line.substring(t3 + 1).toFloatOrNull() ?: Float.NaN
+                        } else {
+                            dg = line.substring(t3 + 1, t4).toFloatOrNull() ?: Float.NaN
+                            val explicitAlpr = line.substring(t4 + 1).toBooleanStrictOrNull()
+                            if (explicitAlpr != null) itemIsAlpr = explicitAlpr
+                        }
                     }
-                    las.add(la); los.add(lo); ops.add(intern.getOrPut(o) { o }); dirs.add(dg)
+                    las.add(la)
+                    los.add(lo)
+                    ops.add(intern.getOrPut(o) { o })
+                    dirs.add(dg)
+                    alprs.add(itemIsAlpr)
                 }
             }
         }
-        val g = HashMap<Long, MutableList<Int>>()
-        for (i in las.indices) g.getOrPut(key(rowOf(las[i]), rowOf(los[i]))) { ArrayList() }.add(i)
-        // Publish (a bad/partial parse threw before here, so we never swap in a half-built set).
-        lat = las.toDoubleArray(); lng = los.toDoubleArray(); op = ops.toTypedArray()
-        dir = dirs.toFloatArray()
-        grid.clear(); grid.putAll(g)
-        loaded = true
+    }
+
+    /**
+     * Persist newly discovered surveillance / ALPR cameras from live queries onto disk,
+     * ensuring they are available locally immediately on subsequent launches.
+     */
+    suspend fun rememberNewCameras(context: Context, newCameras: List<AlprCamera>) = withContext(Dispatchers.IO) {
+        if (newCameras.isEmpty()) return@withContext
+        val liveFile = liveSurvBin(context)
+        val tmp = File(dir(context), "live_surveillance.bin.tmp")
+        val existing = if (liveFile.exists()) {
+            runCatching {
+                val list = ArrayList<AlprCamera>()
+                liveFile.inputStream().use { stream ->
+                    GZIPInputStream(stream).bufferedReader(Charsets.UTF_8).useLines { lines ->
+                        for (l in lines) {
+                            val parts = l.split('\t')
+                            if (parts.size >= 2) {
+                                val la = parts[0].toDoubleOrNull() ?: continue
+                                val lo = parts[1].toDoubleOrNull() ?: continue
+                                val o = parts.getOrNull(2).orEmpty()
+                                val d = parts.getOrNull(3).orEmpty()
+                                val alpr = parts.getOrNull(4)?.toBooleanStrictOrNull() ?: false
+                                list.add(AlprCamera(LatLng(la, lo), o, d, isAlpr = alpr))
+                            }
+                        }
+                    }
+                }
+                list
+            }.getOrDefault(emptyList())
+        } else emptyList()
+
+        val deduped = mergeAndDedupe(existing, newCameras, radiusM = 30.0)
+        if (deduped.size > existing.size) {
+            runCatching {
+                java.util.zip.GZIPOutputStream(tmp.outputStream()).bufferedWriter(Charsets.UTF_8).use { w ->
+                    for (c in deduped) {
+                        w.write("${c.loc.lat}\t${c.loc.lng}\t${c.operator}\t${c.direction}\t${c.isAlpr}\n")
+                    }
+                }
+                if (!tmp.renameTo(liveFile)) {
+                    tmp.copyTo(liveFile, overwrite = true)
+                    tmp.delete()
+                }
+            }
+        }
     }
 
     private val downloadHttp: OkHttpClient by lazy {
@@ -162,7 +261,7 @@ object FlockCameras {
             val target = downloadedBin(context)
             if (!tmp.renameTo(target)) { tmp.copyTo(target, overwrite = true); tmp.delete() }
             downloadedVer(context).writeText(version.toString())
-            loadFrom(target.inputStream()) // hot-swap the in-memory set to the fresh data
+            loadAll(context) // hot-swap the in-memory set to the fresh data
         }
         Unit
     }
@@ -180,7 +279,7 @@ object FlockCameras {
                 grid[key(r, c)]?.let { bucket ->
                     for (i in bucket) {
                         if (lat[i] in south..north && lng[i] in west..east) {
-                            out.add(AlprCamera(LatLng(lat[i], lng[i]), op[i], dirStr(i)))
+                            out.add(AlprCamera(LatLng(lat[i], lng[i]), op[i], dirStr(i), isAlpr = isAlprArr.getOrElse(i) { true }))
                         }
                     }
                 }
@@ -280,7 +379,7 @@ object FlockCameras {
                         val d = dir.getOrElse(i) { Float.NaN }
                         val facing = if (d.isNaN()) null else d.toDouble()
                         if (app.vela.core.nav.CameraFacing.onRoute(polyline, p, facing, meters)) {
-                            out.add(AlprCamera(p, op[i], dirStr(i)))
+                            out.add(AlprCamera(p, op[i], dirStr(i), isAlpr = isAlprArr.getOrElse(i) { true }))
                         }
                     }
                 }

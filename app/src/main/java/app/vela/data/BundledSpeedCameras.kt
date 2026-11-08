@@ -68,7 +68,7 @@ object BundledSpeedCameras {
         mutex.withLock {
             if (loaded) return
             withContext(Dispatchers.IO) {
-                val pts = ArrayList<SpeedCamera>(8000)
+                val pts = ArrayList<SpeedCamera>(75_000)
                 runCatching {
                     context.assets.open(BUNDLED_ASSET).use { raw ->
                         pts.addAll(parseStream(raw))
@@ -84,6 +84,34 @@ object BundledSpeedCameras {
                 }
                 if (pts.isNotEmpty()) {
                     publish(mergeAndDedupe(pts, radiusM = DEDUPE_RADIUS_M))
+                }
+            }
+        }
+    }
+
+    /**
+     * Persist newly discovered speed cameras from live queries onto disk,
+     * ensuring they are stored in the local offline database immediately.
+     */
+    suspend fun rememberNewCameras(context: Context, newCameras: List<SpeedCamera>) = withContext(Dispatchers.IO) {
+        if (newCameras.isEmpty()) return@withContext
+        mutex.withLock {
+            val current = toList()
+            val deduped = mergeAndDedupe(current, newCameras, radiusM = DEDUPE_RADIUS_M)
+            if (deduped.size > current.size) {
+                publish(deduped)
+                runCatching {
+                    val extra = extraCacheFile(context)
+                    val tmp = File(cacheDir(context), "official_fr_extra.bin.tmp")
+                    GZIPOutputStream(tmp.outputStream()).bufferedWriter(Charsets.UTF_8).use { w ->
+                        for (c in deduped) {
+                            w.write("${c.loc.lat}\t${c.loc.lng}\tC\n")
+                        }
+                    }
+                    if (!tmp.renameTo(extra)) {
+                        tmp.copyTo(extra, overwrite = true)
+                        tmp.delete()
+                    }
                 }
             }
         }
@@ -124,16 +152,18 @@ object BundledSpeedCameras {
     }
 
     private fun parseStream(raw: InputStream): List<SpeedCamera> {
-        val out = ArrayList<SpeedCamera>(7000)
+        val out = ArrayList<SpeedCamera>(75_000)
         GZIPInputStream(raw).bufferedReader(Charsets.UTF_8).useLines { lines ->
             for (line in lines) {
                 val t1 = line.indexOf('\t'); if (t1 <= 0) continue
-                val t2 = line.indexOf('\t', t1 + 1); if (t2 < 0) continue
+                val t2 = line.indexOf('\t', t1 + 1)
                 val la = line.substring(0, t1).toDoubleOrNull() ?: continue
-                val lo = line.substring(t1 + 1, t2).toDoubleOrNull() ?: continue
-                val t3 = line.indexOf('\t', t2 + 1)
-                val kind = if (t3 < 0) line.substring(t2 + 1) else line.substring(t2 + 1, t3)
-                if (kind.isEmpty() || kind[0] != 'C') continue
+                val lo = (if (t2 < 0) line.substring(t1 + 1) else line.substring(t1 + 1, t2)).toDoubleOrNull() ?: continue
+                if (t2 >= 0) {
+                    val t3 = line.indexOf('\t', t2 + 1)
+                    val kind = if (t3 < 0) line.substring(t2 + 1) else line.substring(t2 + 1, t3)
+                    if (kind.isNotEmpty() && kind[0] != 'C') continue
+                }
                 out.add(SpeedCamera(LatLng(la, lo)))
             }
         }

@@ -37,7 +37,7 @@ import java.util.zip.GZIPInputStream
  */
 object RoadFeatures {
     private const val CELL = 0.1
-    private const val MAX_LOADED = 4
+    private const val MAX_LOADED = 64
     private const val MANIFEST_TTL_MS = 6L * 60 * 60 * 1000
 
     class Region(val id: String, val name: String, val url: String, val s: Double, val w: Double, val n: Double, val e: Double, val updatedAt: String)

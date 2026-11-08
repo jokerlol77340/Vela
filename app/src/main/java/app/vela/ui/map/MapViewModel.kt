@@ -9966,6 +9966,11 @@ class MapViewModel @Inject constructor(
                 app.vela.data.BundledSpeedCameras.mergeAndDedupe(speedCamLoadedPool, bakedRoute, bakedBox, liveBox, liveRoute)
             }
             speedCamLoadedPool = merged
+            if (bakedBox.isNotEmpty() || liveBox.isNotEmpty()) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    runCatching { app.vela.data.BundledSpeedCameras.rememberNewCameras(appContext, merged) }
+                }
+            }
             diag.record("speedcam", "showing ${merged.size} camera(s) at z${"%.1f".format(zoom)}", "multi-source")
             _state.update { it.copy(speedCameras = merged) }
         }
@@ -10345,6 +10350,11 @@ class MapViewModel @Inject constructor(
                 app.vela.data.FlockCameras.mergeAndDedupe(flockLoadedPool, liveBox.orEmpty())
             }
             flockLoadedPool = merged
+            if (!liveBox.isNullOrEmpty()) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    runCatching { app.vela.data.FlockCameras.rememberNewCameras(appContext, liveBox) }
+                }
+            }
             val kept = capFlock(merged, s, n, w, e)
             diag.record("flock", "showing ${kept.size} camera(s) at z${"%.1f".format(zoom)}", "multi-source")
             _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(kept)) }

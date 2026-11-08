@@ -66,8 +66,8 @@ object OverpassAlprCameras {
         // `out body qt` prints id, lat, lon AND tags with quadtile sorting for sub-second execution.
         val query = "[out:json][timeout:15];" +
             "(node[\"man_made\"=\"surveillance\"]$box;" +
-            "node[\"surveillance:type\"]$box;" +
-            "node[\"camera:type\"]$box;" +
+            "node[\"surveillance\"~\"outdoor|public\"]$box;" +
+            "node[\"camera:type\"~\"fixed|panning|dome|alpr|anpr\"]$box;" +
             "node[\"man_made\"=\"camera\"]$box;);out body qt $limit;"
         // Failover across mirrors: a 504 from the primary overpass-api.de (common under load) used to fail
         // the whole fetch and silently blank the layer. run() returns null only when EVERY endpoint fails.
