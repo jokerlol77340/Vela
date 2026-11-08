@@ -339,6 +339,14 @@ private const val SPEEDCAM_LAYER = "vela-speedcam"
 private const val SPEEDCAM_IMG = "vela-speedcam-badge"
 private const val FLOCK_SRC = "vela-flock-src" // ALPR/Flock cameras (DeFlock/OSM) drawn at high zoom
 private const val FLOCK_LAYER = "vela-flock"
+private const val SURV_CAM_IMG = "vela-surv-cam"
+private const val SURV_DIR_IMG = "vela-surv-cam-dir"
+private const val WAZE_POLICE_IMG = "vela-waze-police"
+private const val WAZE_HAZARD_IMG = "vela-waze-hazard"
+private const val WAZE_ACCIDENT_IMG = "vela-waze-accident"
+private const val WAZE_SRC = "vela-waze-src"
+private const val WAZE_LAYER = "vela-waze-layer"
+private var lastAppliedWazeAlerts: List<app.vela.ui.WazeAlert>? = null
 // Below street zoom the per-head nodes of one install merge to a single badge (Flock corners
 // typically mount 2-4 single-direction heads); the raw per-camera layer + cones take over at
 // FLOCK_DETAIL_ZOOM where the facing data is actually legible.
@@ -573,7 +581,8 @@ private fun twinOf(n: String, kind: String?, hn: String?, ll: LatLng, set: List<
     val norm = normName(n)
     return set.any { m ->
         val d = m.at.distanceTo(ll)
-        (d < DEDUPE_SAME_NAME_M && norm.isNotEmpty() && norm == m.norm) ||
+        ((kind == "fuel" || m.kind == "fuel") && d < 120.0) ||
+            (d < DEDUPE_SAME_NAME_M && norm.isNotEmpty() && norm == m.norm) ||
             // One forecourt per lot, named after different things by the two sources (a Chevron in
             // the archive, the operator's name on Google, user 2026-09-22): the same station. Two
             // across the street from each other differ by house number and are left alone.
@@ -2623,6 +2632,7 @@ fun VelaMapView(
     // phones (their default stays 1.0).
     val speedcamScale = app.vela.ui.MapPoiPrefs.speedcamScale.floatValue
     val flockScale = app.vela.ui.MapPoiPrefs.flockScale.floatValue
+    val survCamScale = app.vela.ui.MapPoiPrefs.surveillanceCamScale.floatValue
     val signalScale = app.vela.ui.MapPoiPrefs.signalScale.floatValue
     val stopSignScale = app.vela.ui.MapPoiPrefs.stopSignScale.floatValue
     val railCrossingScale = app.vela.ui.MapPoiPrefs.railCrossingScale.floatValue
@@ -2634,22 +2644,27 @@ fun VelaMapView(
     val poiPlaceScale = app.vela.ui.MapPoiPrefs.poiPlaceScale.floatValue
     val parkingScale = app.vela.ui.MapPoiPrefs.parkingScale.floatValue
     val savedPinScale = app.vela.ui.MapPoiPrefs.savedPinScale.floatValue
+    val wazeIconScale = app.vela.ui.WazeAlertsPref.wazeIconScale.floatValue
     LaunchedEffect(
         styleRef, poiIconScale, poiLabelScale,
-        speedcamScale, flockScale, signalScale, stopSignScale, railCrossingScale, speedHumpScale,
-        roadShieldScale, exitNumberScale, fuelStationScale, transitStopScale, poiPlaceScale, parkingScale, savedPinScale,
+        speedcamScale, flockScale, survCamScale, signalScale, stopSignScale, railCrossingScale, speedHumpScale,
+        roadShieldScale, exitNumberScale, fuelStationScale, transitStopScale, poiPlaceScale, parkingScale, savedPinScale, wazeIconScale,
     ) {
         val st = styleRef ?: return@LaunchedEffect
         val sc = poiIconScale
         val lc = poiLabelScale
         runCatching {
             RoadShields.applyScales(st, shieldScale = roadShieldScale, exitScale = exitNumberScale)
+            val shieldVis = if (roadShieldScale <= 0f) Property.NONE else Property.VISIBLE
             (st.getLayer(NAV_SHIELD_LAYER) as? SymbolLayer)?.setProperties(
-                PropertyFactory.iconSize(1f * roadShieldScale),
-                PropertyFactory.textSize(11f * roadShieldScale),
+                PropertyFactory.visibility(shieldVis),
+                PropertyFactory.iconSize(1f * roadShieldScale.coerceAtLeast(0.01f)),
+                PropertyFactory.textSize(11f * roadShieldScale.coerceAtLeast(0.01f)),
             )
+            val exitVis = if (exitNumberScale <= 0f) Property.NONE else Property.VISIBLE
             (st.getLayer(NAV_EXIT_LAYER) as? SymbolLayer)?.setProperties(
-                PropertyFactory.textSize(13.5f * exitNumberScale),
+                PropertyFactory.visibility(exitVis),
+                PropertyFactory.textSize(13.5f * exitNumberScale.coerceAtLeast(0.01f)),
             )
             fun poiProminenceExpr(lowBase: Float, highBase: Float, baseMult: Float): Expression {
                 fun interp(m: Float) = Expression.interpolate(
@@ -2699,9 +2714,12 @@ fun VelaMapView(
                     ),
                 ),
                 PropertyFactory.textSize(10.5f * lc * transitStopScale),
+                PropertyFactory.iconOpacity(if (transitStopScale <= 0f) 0f else 1f),
+                PropertyFactory.textOpacity(if (transitStopScale <= 0f) 0f else 1f),
             )
             st.getLayer(PARKING_LAYER)?.setProperties(
                 PropertyFactory.iconSize(sc * parkingScale),
+                PropertyFactory.iconOpacity(if (parkingScale <= 0f) 0f else 1f),
             )
             val controlsScaled = controlsSizeExpression(
                 baseScale = sc,
@@ -2716,21 +2734,49 @@ fun VelaMapView(
             st.getLayer(MARKERS_LAYER)?.setProperties(
                 PropertyFactory.iconSize(1.15f * pinSc),
                 PropertyFactory.textSize(13f * lc * savedPinScale),
+                PropertyFactory.iconOpacity(if (savedPinScale <= 0f) 0f else 1f),
+                PropertyFactory.textOpacity(if (savedPinScale <= 0f) 0f else 1f),
             )
-            st.getLayer(MARKERS_DOTS_LAYER)?.setProperties(PropertyFactory.iconSize(pinSc))
-            st.getLayer(SAVED_LAYER)?.setProperties(PropertyFactory.iconSize(savedPinSize(pinSc)))
-            val flockSc = sc * flockScale
-            val flockScaled = Expression.interpolate(
+            st.getLayer(MARKERS_DOTS_LAYER)?.setProperties(
+                PropertyFactory.iconSize(pinSc),
+                PropertyFactory.iconOpacity(if (savedPinScale <= 0f) 0f else 1f),
+            )
+            st.getLayer(SAVED_LAYER)?.setProperties(
+                PropertyFactory.iconSize(savedPinSize(pinSc)),
+                PropertyFactory.iconOpacity(if (savedPinScale <= 0f) 0f else 1f),
+            )
+            val alprFactor = if (flockScale <= 0f) 0.0001f else sc * flockScale
+            val survFactor = if (survCamScale <= 0f) 0.0001f else sc * survCamScale
+            val camScaleExpr = Expression.switchCase(
+                Expression.eq(Expression.get("isAlpr"), Expression.literal(true)),
+                Expression.literal(alprFactor),
+                Expression.literal(survFactor),
+            )
+            val cameraScaled = Expression.interpolate(
                 Expression.linear(), Expression.zoom(),
-                Expression.stop(11f, 0.55f * flockSc),
-                Expression.stop(14f, 0.7f * flockSc),
-                Expression.stop(17f, 1.0f * flockSc),
-                Expression.stop(19f, 1.35f * flockSc),
+                Expression.stop(11f, Expression.product(Expression.literal(0.55f), camScaleExpr)),
+                Expression.stop(14f, Expression.product(Expression.literal(0.7f), camScaleExpr)),
+                Expression.stop(17f, Expression.product(Expression.literal(1.0f), camScaleExpr)),
+                Expression.stop(19f, Expression.product(Expression.literal(1.35f), camScaleExpr)),
             )
-            st.getLayer(FLOCK_LAYER)?.setProperties(PropertyFactory.iconSize(flockScaled))
-            st.getLayer(FLOCK_CLUSTER_LAYER)?.setProperties(PropertyFactory.iconSize(flockScaled))
-            st.getLayer(FLOCK_DIR_LAYER)?.setProperties(PropertyFactory.iconSize(flockScaled))
-            val speedcamSc = sc * speedcamScale
+            val camOpacityExpr = Expression.switchCase(
+                Expression.eq(Expression.get("isAlpr"), Expression.literal(true)),
+                Expression.literal(if (flockScale <= 0f) 0f else 1f),
+                Expression.literal(if (survCamScale <= 0f) 0f else 1f),
+            )
+            st.getLayer(FLOCK_LAYER)?.setProperties(
+                PropertyFactory.iconSize(cameraScaled),
+                PropertyFactory.iconOpacity(camOpacityExpr),
+            )
+            st.getLayer(FLOCK_CLUSTER_LAYER)?.setProperties(
+                PropertyFactory.iconSize(cameraScaled),
+                PropertyFactory.iconOpacity(camOpacityExpr),
+            )
+            st.getLayer(FLOCK_DIR_LAYER)?.setProperties(
+                PropertyFactory.iconSize(cameraScaled),
+                PropertyFactory.iconOpacity(camOpacityExpr),
+            )
+            val speedcamSc = if (speedcamScale <= 0f) 0.0001f else sc * speedcamScale
             val speedcamScaled = Expression.interpolate(
                 Expression.linear(), Expression.zoom(),
                 Expression.stop(11f, 0.55f * speedcamSc),
@@ -2738,7 +2784,22 @@ fun VelaMapView(
                 Expression.stop(17f, 1.0f * speedcamSc),
                 Expression.stop(19f, 1.35f * speedcamSc),
             )
-            st.getLayer(SPEEDCAM_LAYER)?.setProperties(PropertyFactory.iconSize(speedcamScaled))
+            st.getLayer(SPEEDCAM_LAYER)?.setProperties(
+                PropertyFactory.iconSize(speedcamScaled),
+                PropertyFactory.iconOpacity(if (speedcamScale <= 0f) 0f else 1f),
+            )
+            val wazeFactor = if (wazeIconScale <= 0f) 0.0001f else sc * wazeIconScale
+            val wazeScaled = Expression.interpolate(
+                Expression.linear(), Expression.zoom(),
+                Expression.stop(11f, 0.55f * wazeFactor),
+                Expression.stop(14f, 0.75f * wazeFactor),
+                Expression.stop(17f, 1.0f * wazeFactor),
+                Expression.stop(19f, 1.35f * wazeFactor),
+            )
+            st.getLayer(WAZE_LAYER)?.setProperties(
+                PropertyFactory.iconSize(wazeScaled),
+                PropertyFactory.iconOpacity(if (wazeIconScale <= 0f) 0f else 1f),
+            )
         }
     }
 
@@ -6494,15 +6555,31 @@ PropertyFactory.iconPadding(2f),
     // stack places before this layer, so it is unaffected by the claim and still wins on top.
     if (style.getImage(FLOCK_IMG) == null) style.addImage(FLOCK_IMG, alprCameraBitmap())
     if (style.getImage(FLOCK_DIR_IMG) == null) style.addImage(FLOCK_DIR_IMG, alprConeBitmap())
+    if (style.getImage(SURV_CAM_IMG) == null) style.addImage(SURV_CAM_IMG, surveillanceCameraBitmap())
+    if (style.getImage(SURV_DIR_IMG) == null) style.addImage(SURV_DIR_IMG, surveillanceConeBitmap())
+    if (style.getImage(WAZE_POLICE_IMG) == null) style.addImage(WAZE_POLICE_IMG, wazePoliceBitmap())
+    if (style.getImage(WAZE_HAZARD_IMG) == null) style.addImage(WAZE_HAZARD_IMG, wazeHazardBitmap())
+    if (style.getImage(WAZE_ACCIDENT_IMG) == null) style.addImage(WAZE_ACCIDENT_IMG, wazeAccidentBitmap())
     if (style.getSource(FLOCK_SRC) == null) {
         style.addSource(GeoJsonSource(FLOCK_SRC, GeoJsonOptions().withMaxZoom(16)))
         val flockScInit = app.vela.ui.MapPoiPrefs.flockScale.floatValue
+        val survScInit = app.vela.ui.MapPoiPrefs.surveillanceCamScale.floatValue
+        val camScaleInit = Expression.switchCase(
+            Expression.eq(Expression.get("isAlpr"), Expression.literal(true)),
+            Expression.literal(if (flockScInit <= 0f) 0.0001f else flockScInit),
+            Expression.literal(if (survScInit <= 0f) 0.0001f else survScInit),
+        )
         val flockSize = Expression.interpolate(
             Expression.linear(), Expression.zoom(),
-            Expression.stop(11f, 0.55f * flockScInit),
-            Expression.stop(14f, 0.7f * flockScInit),
-            Expression.stop(17f, 1.0f * flockScInit),
-            Expression.stop(19f, 1.35f * flockScInit),
+            Expression.stop(11f, Expression.product(Expression.literal(0.55f), camScaleInit)),
+            Expression.stop(14f, Expression.product(Expression.literal(0.7f), camScaleInit)),
+            Expression.stop(17f, Expression.product(Expression.literal(1.0f), camScaleInit)),
+            Expression.stop(19f, Expression.product(Expression.literal(1.35f), camScaleInit)),
+        )
+        val camOpacityInit = Expression.switchCase(
+            Expression.eq(Expression.get("isAlpr"), Expression.literal(true)),
+            Expression.literal(if (flockScInit <= 0f) 0f else 1f),
+            Expression.literal(if (survScInit <= 0f) 0f else 1f),
         )
         val flockLayer =
             SymbolLayer(FLOCK_LAYER, FLOCK_SRC).apply {
@@ -6512,8 +6589,9 @@ PropertyFactory.iconPadding(2f),
                 setMinZoom(FLOCK_DETAIL_ZOOM)
                 setFilter(Expression.has(FLOCK_COUNT_PROP))
                 setProperties(
-                    PropertyFactory.iconImage(FLOCK_IMG),
+                    PropertyFactory.iconImage(Expression.get("icon")),
                     PropertyFactory.iconSize(flockSize),
+                    PropertyFactory.iconOpacity(camOpacityInit),
                     PropertyFactory.iconOffset(
                         Expression.switchCase(
                             Expression.has(FLOCK_NUDGE_PROP), Expression.literal(arrayOf(11f, -11f)),
@@ -6547,8 +6625,9 @@ PropertyFactory.iconPadding(2f),
                 setMinZoom(11f)
                 setMaxZoom(FLOCK_DETAIL_ZOOM)
                 setProperties(
-                    PropertyFactory.iconImage(FLOCK_IMG),
+                    PropertyFactory.iconImage(Expression.get("icon")),
                     PropertyFactory.iconSize(flockSize),
+                    PropertyFactory.iconOpacity(camOpacityInit),
                     PropertyFactory.iconOffset(
                         Expression.switchCase(
                             Expression.has(FLOCK_NUDGE_PROP), Expression.literal(arrayOf(11f, -11f)),
@@ -6572,8 +6651,9 @@ PropertyFactory.iconPadding(2f),
                 setMinZoom(FLOCK_DETAIL_ZOOM)
                 setFilter(Expression.has(FLOCK_DIR_PROP))
                 setProperties(
-                    PropertyFactory.iconImage(FLOCK_DIR_IMG),
+                    PropertyFactory.iconImage(Expression.get("coneIcon")),
                     PropertyFactory.iconSize(flockSize),
+                    PropertyFactory.iconOpacity(camOpacityInit),
                     PropertyFactory.iconAllowOverlap(true),
                     PropertyFactory.iconIgnorePlacement(true),
                     PropertyFactory.iconRotate(Expression.get(FLOCK_DIR_PROP)),
@@ -6584,6 +6664,35 @@ PropertyFactory.iconPadding(2f),
             },
             FLOCK_LAYER,
         )
+    }
+    // Live Waze community route alerts
+    if (style.getSource(WAZE_SRC) == null) {
+        style.addSource(GeoJsonSource(WAZE_SRC, GeoJsonOptions().withMaxZoom(16)))
+        val wazeScInit = app.vela.ui.WazeAlertsPref.wazeIconScale.floatValue
+        val wazeFactor = if (wazeScInit <= 0f) 0.0001f else wazeScInit
+        val wazeSize = Expression.interpolate(
+            Expression.linear(), Expression.zoom(),
+            Expression.stop(11f, 0.55f * wazeFactor),
+            Expression.stop(14f, 0.75f * wazeFactor),
+            Expression.stop(17f, 1.0f * wazeFactor),
+            Expression.stop(19f, 1.35f * wazeFactor),
+        )
+        val wazeLayer = SymbolLayer(WAZE_LAYER, WAZE_SRC).apply {
+            setMinZoom(10f)
+            setProperties(
+                PropertyFactory.iconImage(Expression.get("icon")),
+                PropertyFactory.iconSize(wazeSize),
+                PropertyFactory.iconOpacity(if (wazeScInit <= 0f) 0f else 1f),
+                PropertyFactory.iconAllowOverlap(true),
+                PropertyFactory.iconIgnorePlacement(false),
+                PropertyFactory.iconPadding(2f),
+            )
+        }
+        if (style.getLayer(FLOCK_LAYER) != null) {
+            style.addLayerAbove(wazeLayer, FLOCK_LAYER)
+        } else {
+            style.addLayer(wazeLayer)
+        }
     }
     // Fixed radar/speed cameras (issue #229): opt-in Overpass layer, same badge language as the
     // ALPR camera but amber so enforcement reads apart from surveillance. Sparse landmarks, so it
@@ -6862,9 +6971,19 @@ internal fun applyPoiTierFilters(style: StyleLayers, fuelOnly: Boolean) {
     )
     if (fuelOnly) {
         val fuel = Expression.eq(Expression.get("class"), Expression.literal("fuel"))
-        listOf("poi_r1", "poi_r7", "poi_r20").forEach { id ->
-            (style.getLayer(id) as? SymbolLayer)?.setFilter(Expression.all(isPoint, fuel))
+        fun fuelTier(id: String, lo: Int, hi: Int?) {
+            val parts = mutableListOf(isPoint, fuel, Expression.gte(Expression.get("rank"), Expression.literal(lo)))
+            if (hi != null) parts += Expression.lt(Expression.get("rank"), Expression.literal(hi))
+            if (placesNavFuelOnly || osmOneSet) {
+                // When open places overlays are actively drawing fuel in nav, or one-set is active, suppress duplicate OSM fuel
+                parts += Expression.literal(false)
+            }
+            if (osmPoiExclude.isNotEmpty()) parts += Expression.not(Expression.`in`(Expression.get("name"), Expression.literal(osmPoiExclude.toTypedArray<Any>())))
+            (style.getLayer(id) as? SymbolLayer)?.setFilter(Expression.all(*parts.toTypedArray()))
         }
+        fuelTier("poi_r1", 1, 7)
+        fuelTier("poi_r7", 7, 20)
+        fuelTier("poi_r20", 20, null)
         return
     }
     // VEGETATION, not DESTINATIONS (user 2026-09-18: a named park drew no icon and no label at
@@ -6936,6 +7055,7 @@ private fun osmFillIn(map: MapLibreMap, style: Style) {
     val osm = runCatching { map.queryRenderedFeatures(box, *poiLayers.toTypedArray()) }.getOrNull().orEmpty()
     if (osm.isEmpty()) return
     val open = HashMap<String, ArrayList<LatLng>>()
+    val openFuel = ArrayList<LatLng>()
     // With OSM's businesses shown (osmBusinessesOn), every open icon can twin one, so the open side
     // is the whole icon set; otherwise only the groups an OSM non-business point can match.
     val nonBusiness = Expression.`in`(Expression.get("group"), Expression.literal(OPEN_NONBUSINESS_GROUPS))
@@ -6947,9 +7067,22 @@ private fun osmFillIn(map: MapLibreMap, style: Style) {
     openRendered?.forEach { f ->
         val pt = f.geometry() as? Point ?: return@forEach
         val n = f.getStringProperty("name") ?: return@forEach
-        open.getOrPut(fillKey(n)) { ArrayList() } += LatLng(pt.latitude(), pt.longitude())
+        val loc = LatLng(pt.latitude(), pt.longitude())
+        open.getOrPut(fillKey(n)) { ArrayList() } += loc
+        if (f.getStringProperty("group") == "fuel" || f.getStringProperty("class") == "fuel") {
+            openFuel += loc
+        }
     }
-    if (open.isEmpty()) return
+    runCatching {
+        map.queryRenderedFeatures(box, AMBIENT_LAYER).forEach { af ->
+            val pt = af.geometry() as? Point ?: return@forEach
+            val icon = af.getStringProperty("icon") ?: ""
+            if (icon.contains("fuel")) {
+                openFuel += LatLng(pt.latitude(), pt.longitude())
+            }
+        }
+    }
+    if (open.isEmpty() && openFuel.isEmpty()) return
     val already = osmPoiExclude.toHashSet()
     val add = LinkedHashSet<String>()
     osm.forEach { f ->
@@ -6957,6 +7090,11 @@ private fun osmFillIn(map: MapLibreMap, style: Style) {
         val n = f.getStringProperty("name") ?: return@forEach
         if (n in already) return@forEach
         val ll = LatLng(pt.latitude(), pt.longitude())
+        val isOsmFuel = f.getStringProperty("class") == "fuel"
+        if (isOsmFuel && openFuel.any { it.distanceTo(ll) < 120.0 }) {
+            add += n
+            return@forEach
+        }
         val keys = sequenceOf(n, f.getStringProperty("name:latin"), f.getStringProperty("name_en")).filterNotNull().map(::fillKey).distinct()
         // A place that covers ground (a golf course, a park, a campus) has its OSM point at the
         // middle of its outline and its open-data point at the clubhouse or the gate, hundreds of
@@ -10404,40 +10542,65 @@ private fun applyData(
     // drawn below street zoom. The route "passes N cameras" count stays on raw nodes on purpose;
     // only the DRAWN badges merge.
     if (flockCameras != lastAppliedFlock || trafficControls !== lastFlockControls) {
-        // ONE badge per install, at every zoom (user 2026-09-17: a junction with a head on each
-        // approach drew four overlapping badges). The heads' facing cones all fan from that one
-        // point, so the beams still say which ways it watches, and a small "x4" says how many
-        // heads are there. The route "passes N cameras" count still runs on the raw nodes.
-        val clusters = app.vela.core.data.MapDeclutter.cluster(flockCameras, FLOCK_CLUSTER_M) { it.loc }
+        val (alprCams, survCams) = flockCameras.partition { it.isAlpr }
+        val alprClusters = app.vela.core.data.MapDeclutter.cluster(alprCams, FLOCK_CLUSTER_M) { it.loc }
+        val survClusters = app.vela.core.data.MapDeclutter.cluster(survCams, FLOCK_CLUSTER_M) { it.loc }
         val lights = trafficControls.filter {
             it.kind == app.vela.core.data.TrafficControl.Kind.SIGNAL || it.kind == app.vela.core.data.TrafficControl.Kind.STOP
         }
-        val nudged = clusters.map { c -> lights.any { it.loc.distanceTo(c.centroid) < FLOCK_NUDGE_M } }
-        val feats = ArrayList<Feature>(clusters.size * 2)
-        for ((ci, c) in clusters.withIndex()) {
-            feats += Feature.fromGeometry(Point.fromLngLat(c.centroid.lng, c.centroid.lat)).apply {
-                addNumberProperty(FLOCK_COUNT_PROP, c.members.size)
-                if (nudged[ci]) addBooleanProperty(FLOCK_NUDGE_PROP, true)
-            }
-            // One cone per head that carries a direction, all anchored on the badge's point.
-            for (cam in c.members) {
-                val dir = cam.direction.toFloatOrNull() ?: continue
+        val feats = ArrayList<Feature>((alprClusters.size + survClusters.size) * 2)
+        val clusteredFeats = ArrayList<Feature>(alprClusters.size + survClusters.size)
+
+        fun processCameraClusters(clusters: List<app.vela.core.data.MapDeclutter.Cluster<app.vela.core.data.AlprCamera>>, isAlpr: Boolean) {
+            val iconName = if (isAlpr) FLOCK_IMG else SURV_CAM_IMG
+            val coneName = if (isAlpr) FLOCK_DIR_IMG else SURV_DIR_IMG
+            for (c in clusters) {
+                val isNudged = lights.any { it.loc.distanceTo(c.centroid) < FLOCK_NUDGE_M }
                 feats += Feature.fromGeometry(Point.fromLngLat(c.centroid.lng, c.centroid.lat)).apply {
-                    addNumberProperty(FLOCK_DIR_PROP, dir)
+                    addNumberProperty(FLOCK_COUNT_PROP, c.members.size)
+                    addStringProperty("icon", iconName)
+                    addBooleanProperty("isAlpr", isAlpr)
+                    if (isNudged) addBooleanProperty(FLOCK_NUDGE_PROP, true)
+                }
+                for (cam in c.members) {
+                    val dir = cam.direction.toFloatOrNull() ?: continue
+                    feats += Feature.fromGeometry(Point.fromLngLat(c.centroid.lng, c.centroid.lat)).apply {
+                        addNumberProperty(FLOCK_DIR_PROP, dir)
+                        addStringProperty("coneIcon", coneName)
+                        addBooleanProperty("isAlpr", isAlpr)
+                    }
+                }
+                clusteredFeats += Feature.fromGeometry(Point.fromLngLat(c.centroid.lng, c.centroid.lat)).apply {
+                    addStringProperty("icon", iconName)
+                    addBooleanProperty("isAlpr", isAlpr)
+                    if (isNudged) addBooleanProperty(FLOCK_NUDGE_PROP, true)
                 }
             }
         }
+        processCameraClusters(alprClusters, isAlpr = true)
+        processCameraClusters(survClusters, isAlpr = false)
+
         style.getSourceAs<GeoJsonSource>(FLOCK_SRC)?.setGeoJson(FeatureCollection.fromFeatures(feats))
-        val clusteredFc = FeatureCollection.fromFeatures(
-            clusters.mapIndexed { ci, c ->
-                Feature.fromGeometry(Point.fromLngLat(c.centroid.lng, c.centroid.lat)).apply {
-                    if (nudged[ci]) addBooleanProperty(FLOCK_NUDGE_PROP, true)
-                }
-            },
-        )
-        style.getSourceAs<GeoJsonSource>(FLOCK_CLUSTER_SRC)?.setGeoJson(clusteredFc)
+        style.getSourceAs<GeoJsonSource>(FLOCK_CLUSTER_SRC)?.setGeoJson(FeatureCollection.fromFeatures(clusteredFeats))
         lastAppliedFlock = flockCameras
         lastFlockControls = trafficControls
+    }
+
+    // Waze community live route alerts
+    val wazeAlerts = app.vela.ui.WazeAlertsPref.filteredRouteAlerts
+    if (wazeAlerts != lastAppliedWazeAlerts) {
+        val wazeFeats = wazeAlerts.map { alert ->
+            Feature.fromGeometry(Point.fromLngLat(alert.loc.lng, alert.loc.lat)).apply {
+                val icon = when (alert.kind) {
+                    app.vela.ui.WazeAlertKind.POLICE -> WAZE_POLICE_IMG
+                    app.vela.ui.WazeAlertKind.HAZARD -> WAZE_HAZARD_IMG
+                    app.vela.ui.WazeAlertKind.ACCIDENT -> WAZE_ACCIDENT_IMG
+                }
+                addStringProperty("icon", icon)
+            }
+        }
+        style.getSourceAs<GeoJsonSource>(WAZE_SRC)?.setGeoJson(FeatureCollection.fromFeatures(wazeFeats))
+        lastAppliedWazeAlerts = wazeAlerts
     }
 
     // Fixed radar cameras -> icon features (identity-gated like the rest). Empty clears the source.
@@ -11046,19 +11209,151 @@ internal fun alprCameraBitmap(): Bitmap {
     val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
     val c = Canvas(bmp)
     val white = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
-    val maroon = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF7B1FA2.toInt() } // purple: distinct from red controls
+    val purple = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF7B1FA2.toInt() } // purple: distinct for plate readers
     // Rounded-square badge (white rim + purple field).
     c.drawRoundRect(2f, 2f, s - 2f, s - 2f, 11f, 11f, white)
-    c.drawRoundRect(4.5f, 4.5f, s - 4.5f, s - 4.5f, 9f, 9f, maroon)
-    // A simple CCTV camera in white: body, lens, and a mount arm.
-    val body = android.graphics.RectF(12f, 18f, 30f, 27f)
+    c.drawRoundRect(4.5f, 4.5f, s - 4.5f, s - 4.5f, 9f, 9f, purple)
+    // Camera top housing + lens
+    val body = android.graphics.RectF(13f, 12f, 31f, 22f)
     c.drawRoundRect(body, 2f, 2f, white)
-    c.drawCircle(31f, 22.5f, 4.2f, white) // lens housing at the front
-    c.drawCircle(31f, 22.5f, 2.0f, maroon) // lens glass
-    // Mount: a short arm up to the top rail.
-    val arm = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt(); strokeWidth = 2.4f; style = Paint.Style.STROKE }
-    c.drawLine(17f, 18f, 17f, 12f, arm)
-    c.drawLine(12f, 12f, 24f, 12f, arm)
+    c.drawCircle(32f, 17f, 3.8f, white) // lens housing
+    c.drawCircle(32f, 17f, 1.8f, purple) // lens glass
+    c.drawCircle(18f, 17f, 2.5f, purple) // sensor
+    // License plate glyph at the bottom: rounded white rect with dark dash slots [ - - ]
+    val plate = android.graphics.RectF(11f, 26f, 35f, 34f)
+    c.drawRoundRect(plate, 2f, 2f, white)
+    val plateDash = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = purple.color; strokeWidth = 1.6f }
+    c.drawLine(15f, 30f, 19f, 30f, plateDash)
+    c.drawLine(22f, 30f, 24f, 30f, plateDash)
+    c.drawLine(27f, 30f, 31f, 30f, plateDash)
+    return bmp
+}
+
+/** CCTV surveillance camera marker: deep cyan/teal rounded badge with an angled wall-mounted security camera. */
+internal fun surveillanceCameraBitmap(): Bitmap {
+    val s = 46
+    val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val white = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
+    val blue = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF0277BD.toInt() } // deep teal-blue: surveillance
+    // Rounded-square badge (white rim + blue field).
+    c.drawRoundRect(2f, 2f, s - 2f, s - 2f, 11f, 11f, white)
+    c.drawRoundRect(4.5f, 4.5f, s - 4.5f, s - 4.5f, 9f, 9f, blue)
+    // Wall mount bracket on the left
+    val mount = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt(); strokeWidth = 2.4f; style = Paint.Style.STROKE }
+    c.drawLine(11f, 14f, 11f, 26f, mount)
+    c.drawLine(11f, 20f, 18f, 20f, mount)
+    c.drawLine(18f, 20f, 21f, 23f, mount)
+    // Angled CCTV body
+    val body = android.graphics.RectF(16f, 17f, 32f, 26f)
+    c.drawRoundRect(body, 2.5f, 2.5f, white)
+    // Sunshield / roof visor over the camera body
+    val roof = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt(); strokeWidth = 2f; style = Paint.Style.STROKE }
+    c.drawLine(14f, 15.5f, 35f, 15.5f, roof)
+    // Front lens housing
+    c.drawCircle(33f, 21.5f, 4.2f, white)
+    c.drawCircle(33f, 21.5f, 2.0f, blue)
+    return bmp
+}
+
+private fun surveillanceConeBitmap(): Bitmap {
+    val w = 160; val h = 150
+    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val cx = w / 2f
+    val apexY = h - 2f
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        shader = android.graphics.LinearGradient(
+            cx, apexY, cx, 0f,
+            0x9B0277BD.toInt(), 0x050277BD, android.graphics.Shader.TileMode.CLAMP,
+        )
+    }
+    val cone = Path().apply {
+        moveTo(cx, apexY)
+        lineTo(cx - w * 0.44f, 6f)
+        quadTo(cx, 26f, cx + w * 0.44f, 6f)
+        close()
+    }
+    c.drawPath(cone, paint)
+    val axis = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xB30277BD.toInt(); strokeWidth = 3f; style = Paint.Style.STROKE
+    }
+    c.drawLine(cx, apexY, cx, 20f, axis)
+    return bmp
+}
+
+internal fun wazePoliceBitmap(): Bitmap {
+    val s = 46
+    val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val white = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
+    val blue = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1976D2.toInt() } // police blue
+    c.drawRoundRect(2f, 2f, s - 2f, s - 2f, 11f, 11f, white)
+    c.drawRoundRect(4.5f, 4.5f, s - 4.5f, s - 4.5f, 9f, 9f, blue)
+    val path = Path().apply {
+        moveTo(13f, 26f)
+        quadTo(23f, 29f, 33f, 26f)
+        lineTo(35f, 22f)
+        lineTo(31f, 16f)
+        quadTo(23f, 13f, 15f, 16f)
+        lineTo(11f, 22f)
+        close()
+    }
+    c.drawPath(path, white)
+    val starPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = blue.color }
+    c.drawCircle(23f, 20f, 3.2f, starPaint)
+    c.drawCircle(23f, 20f, 1.4f, white)
+    val visor = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt(); strokeWidth = 2.4f; style = Paint.Style.STROKE }
+    c.drawLine(12f, 28f, 34f, 28f, visor)
+    return bmp
+}
+
+internal fun wazeHazardBitmap(): Bitmap {
+    val s = 46
+    val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val white = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
+    val amber = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFF57C00.toInt() } // warning orange
+    c.drawRoundRect(2f, 2f, s - 2f, s - 2f, 11f, 11f, white)
+    c.drawRoundRect(4.5f, 4.5f, s - 4.5f, s - 4.5f, 9f, 9f, amber)
+    val path = Path().apply {
+        moveTo(23f, 11f)
+        lineTo(36f, 33f)
+        lineTo(10f, 33f)
+        close()
+    }
+    c.drawPath(path, white)
+    val mark = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = amber.color; strokeWidth = 2.6f; strokeCap = Paint.Cap.ROUND }
+    c.drawLine(23f, 18f, 23f, 26f, mark)
+    c.drawCircle(23f, 29.5f, 1.5f, mark)
+    return bmp
+}
+
+internal fun wazeAccidentBitmap(): Bitmap {
+    val s = 46
+    val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    val white = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
+    val red = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFD32F2F.toInt() } // accident red
+    c.drawRoundRect(2f, 2f, s - 2f, s - 2f, 11f, 11f, white)
+    c.drawRoundRect(4.5f, 4.5f, s - 4.5f, s - 4.5f, 9f, 9f, red)
+    val path = Path().apply {
+        moveTo(23f, 12f)
+        lineTo(26f, 19f)
+        lineTo(33f, 18f)
+        lineTo(28f, 23f)
+        lineTo(34f, 28f)
+        lineTo(26f, 27f)
+        lineTo(23f, 34f)
+        lineTo(20f, 27f)
+        lineTo(12f, 28f)
+        lineTo(18f, 23f)
+        lineTo(13f, 18f)
+        lineTo(20f, 19f)
+        close()
+    }
+    c.drawPath(path, white)
+    c.drawCircle(23f, 23f, 3f, red)
     return bmp
 }
 

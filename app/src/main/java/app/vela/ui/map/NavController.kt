@@ -153,6 +153,7 @@ internal class NavController(
                         refreshNavRouteControls(nsRoute)
                         refreshRouteSpeedCams(nsRoute) // spoken camera warnings (issue #229)
                         refreshRouteFlock(nsRoute) // plate-camera card / voice alerts
+                        refreshRouteWaze(nsRoute) // Waze live alerts
                         refreshRouteBridges(nsRoute) // bridge openings in the Netherlands (NDW)
                     }
                 }
@@ -162,6 +163,7 @@ internal class NavController(
                     routeCamMeters = emptyList(); routeCamKey = null; spokenCams = emptySet()
                     app.vela.car.CarBridge.clear()
                     clearRouteFlock()
+                    clearRouteWaze()
                     clearRouteBridges()
                     speeding.reset()
                 }
@@ -179,7 +181,7 @@ internal class NavController(
                     if (ns.navigating && toStop != null) app.vela.ui.nav.NavLegFigures.Leg(toStop, ns.nav.remainingDistance, ns.nav.remainingDuration) else null
                 // Speak an approach warning for a camera coming up (issue #229). Cheap per tick:
                 // a scan of a short list; the projection was done once when the route landed.
-                if (ns.navigating) { maybeWarnCamera(ns); maybeWarnFlock(ns); maybeWarnSpeeding(); maybeWarnBridge(ns) }
+                if (ns.navigating) { maybeWarnCamera(ns); maybeWarnFlock(ns); maybeWarnWaze(ns); maybeWarnSpeeding(); maybeWarnBridge(ns) }
                 _state.update {
                     it.copy(
                         navigating = ns.navigating,
@@ -263,6 +265,29 @@ internal class NavController(
                     if (vs.replaying && !vs.demoDriving) return@collect
                     if (on) routeFlockKey = null // force the projection even for the same route
                     refreshRouteFlock(r)
+                }
+        }
+        // Same for live Waze alerts: turning warnings on mid-drive or receiving refreshed Waze alerts projects them
+        scope.launch {
+            androidx.compose.runtime.snapshotFlow { app.vela.ui.WazeAlertsPref.any }
+                .collect { on ->
+                    val r = navSession.state.value.route ?: return@collect
+                    if (!navSession.state.value.navigating) return@collect
+                    val vs = _state.value
+                    if (vs.replaying && !vs.demoDriving) return@collect
+                    if (on) routeWazeKey = null
+                    refreshRouteWaze(r)
+                }
+        }
+        scope.launch {
+            androidx.compose.runtime.snapshotFlow { app.vela.ui.WazeAlertsPref.currentRouteAlerts.value }
+                .collect {
+                    val r = navSession.state.value.route ?: return@collect
+                    if (!navSession.state.value.navigating) return@collect
+                    val vs = _state.value
+                    if (vs.replaying && !vs.demoDriving) return@collect
+                    routeWazeKey = null
+                    refreshRouteWaze(r)
                 }
         }
         // Same for bridge openings: on mid-drive asks NDW now, off clears the list.
@@ -1190,6 +1215,19 @@ internal class NavController(
         routeFlockKey = null; routeFlockGroups = emptyList(); routeFlockMeters = emptyList(); alertedFlock = emptySet()
     }
 
+    // Live Waze alerts along active route
+    private var routeWazeKey: String? = null
+    private var routeWazeAlerts: List<app.vela.ui.WazeAlert> = emptyList()
+    private var routeWazeMeters: List<Double> = emptyList()
+    private var alertedWaze: Set<Int> = emptySet()
+
+    private fun clearRouteWaze() {
+        routeWazeKey = null
+        routeWazeAlerts = emptyList()
+        routeWazeMeters = emptyList()
+        alertedWaze = emptySet()
+    }
+
     /** Project the plate cameras that can see this route onto it, once per driven route. The
      *  bundled dataset is in memory, so this is local work, no network. Only cameras that face
      *  along the route count ([app.vela.data.FlockCameras.along]); ones within 40 m of each other
@@ -1248,6 +1286,48 @@ internal class NavController(
         )
         if (app.vela.ui.FlockNavAlert.card.value) host.flashStatus(msg, 6000L)
         if (app.vela.ui.FlockNavAlert.voice.value) alert(msg)
+        app.vela.car.CarBridge.toast(msg)
+    }
+
+    /** Project Waze alerts (police, hazards, accidents) onto the driven route and announce them
+     *  via card banner and/or voice. */
+    private fun refreshRouteWaze(route: app.vela.core.model.Route) {
+        if (!app.vela.ui.WazeAlertsPref.any) { clearRouteWaze(); return }
+        val poly = route.polyline
+        if (poly.size < 2) return
+        val alerts = app.vela.ui.WazeAlertsPref.filteredRouteAlerts
+        if (alerts.isEmpty()) { clearRouteWaze(); return }
+        val f = poly.first(); val l = poly.last()
+        val key = String.format(
+            java.util.Locale.US, "%.4f,%.4f|%.4f,%.4f|%d|%d",
+            f.lat, f.lng, l.lat, l.lng, (route.distanceMeters / 500).toInt(), alerts.size,
+        )
+        if (key == routeWazeKey) return
+        routeWazeKey = key
+        alertedWaze = emptySet()
+        val cum = app.vela.core.nav.RouteProjection.cumulative(poly)
+        val projected = alerts.mapNotNull { a ->
+            val m = app.vela.core.nav.RouteProjection.alongMeters(poly, cum, a.loc, 85.0)
+            m?.let { a to it }
+        }.sortedBy { it.second }
+        routeWazeAlerts = projected.map { it.first }
+        routeWazeMeters = projected.map { it.second }
+    }
+
+    private fun maybeWarnWaze(ns: app.vela.core.nav.NavSession.State) {
+        if (routeWazeMeters.isEmpty() || !app.vela.ui.WazeAlertsPref.any) return
+        val i = app.vela.core.nav.CameraAlerts.due(
+            routeWazeMeters, ns.nav.traveledM, (_state.value.mySpeed ?: 0f).toDouble(), alertedWaze, null,
+        ) ?: return
+        alertedWaze = alertedWaze + i
+        val alertItem = routeWazeAlerts.getOrNull(i) ?: return
+        val msg = when (alertItem.kind) {
+            app.vela.ui.WazeAlertKind.POLICE -> appContext.getString(R.string.waze_warn_police)
+            app.vela.ui.WazeAlertKind.HAZARD -> appContext.getString(R.string.waze_warn_hazard)
+            app.vela.ui.WazeAlertKind.ACCIDENT -> appContext.getString(R.string.waze_warn_accident)
+        }
+        if (app.vela.ui.WazeAlertsPref.cardWarn.value) host.flashStatus(msg, 6000L)
+        if (app.vela.ui.WazeAlertsPref.voiceWarn.value) alert(msg)
         app.vela.car.CarBridge.toast(msg)
     }
 

@@ -67,7 +67,7 @@ object OverpassAlprCameras {
         // lat/lon, so the parser dropped every camera (no coordinates) and the layer drew nothing.
         // `out body` prints id, lat, lon AND tags - what we need to place the marker + read operator.
         val query = "[out:json][timeout:25];" +
-            "(node[\"surveillance:type\"~\"ALPR|ANPR\",i]$box;node[\"camera:type\"~\"ALPR|ANPR\",i]$box;node[\"man_made\"=\"surveillance\"][\"surveillance\"~\"traffic|public|outdoor\"]$box;node[\"man_made\"=\"surveillance\"][\"surveillance:zone\"~\"traffic|town|road\"]$box;);out body $limit;"
+            "(node[\"surveillance:type\"~\"ALPR|ANPR\",i]$box;node[\"camera:type\"~\"ALPR|ANPR\",i]$box;node[\"man_made\"=\"surveillance\"][\"surveillance\"!=\"indoor\"]$box;);out body $limit;"
         // Failover across mirrors: a 504 from the primary overpass-api.de (common under load) used to fail
         // the whole fetch and silently blank the layer. run() returns null only when EVERY endpoint fails.
         return OverpassEndpoints.run(slow(http), query) { body ->
@@ -144,9 +144,13 @@ object OverpassAlprCameras {
         // Direction-aware: a camera aimed across the road reads cross traffic, not this route
         // (untagged cameras still count). See nav/CameraFacing.
         return all.filter {
-            app.vela.core.nav.CameraFacing.onRoute(
-                polyline, it.loc, app.vela.core.nav.CameraFacing.parse(it.direction), nearMeters,
-            )
+            if (it.isAlpr) {
+                app.vela.core.nav.CameraFacing.onRoute(
+                    polyline, it.loc, app.vela.core.nav.CameraFacing.parse(it.direction), nearMeters,
+                )
+            } else {
+                nearPolyline(it.loc, polyline, nearMeters)
+            }
         }
     }
 
@@ -154,7 +158,7 @@ object OverpassAlprCameras {
      *  [padDeg]) so no single Overpass query spans a huge box. Only tiles the line actually enters are
      *  returned (a diagonal route touches a diagonal band of the grid, not the whole rectangle), capped
      *  at [maxTiles]. Each entry is [south, west, north, east]. Pure/side-effect-free (unit-tested). */
-    internal fun routeTiles(
+    fun routeTiles(
         polyline: List<LatLng>,
         padDeg: Double,
         maxSpanDeg: Double,

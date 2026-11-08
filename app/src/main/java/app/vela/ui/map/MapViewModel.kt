@@ -4624,6 +4624,8 @@ class MapViewModel @Inject constructor(
     fun clearSelection() {
         reviewsJob?.cancel() // free the scrape WebView/mutex — nothing is reading its result now
         routeJob?.cancel() // a directions fetch in flight must not resurrect routes after we clear them
+        wazeJob?.cancel()
+        app.vela.ui.WazeAlertsPref.currentRouteAlerts.value = emptyList()
         // Remember what the user just had open: the close-triggered ambient repaint re-cuts the
         // pool to the zoom-tiered cap, and a modest place could lose its slot to ranking jitter -
         // the icon you were JUST looking at vanished on back-out (user 2026-07-17). The pin below
@@ -4695,6 +4697,8 @@ class MapViewModel @Inject constructor(
         autoStartOnRoute = false // backing out of directions cancels a pending auto-start (issue #272)
         destination = null
         routeJob?.cancel() // an in-flight directions fetch must not repopulate the route we're backing out of
+        wazeJob?.cancel()
+        app.vela.ui.WazeAlertsPref.currentRouteAlerts.value = emptyList()
         modeEtaJob?.cancel(); modeEtaKey = null
         _state.update {
             it.copy(
@@ -5935,7 +5939,7 @@ class MapViewModel @Inject constructor(
         app.vela.ui.ParkingActions.arrivedByCar = { _state.value.travelMode == TravelMode.DRIVE }
         app.vela.ui.ParkingActions.parkedAt = { _state.value.parkedAtMillis }
     }
-    init { app.vela.ui.SavedActions.rename = ::renamePlace; app.vela.ui.ShapeActions.delete = ::deleteOpenedShape; app.vela.ui.ShapeActions.edit = ::editOpenedShape; app.vela.ui.RouteActions.pinTrip = ::pinTripShortcut; app.vela.ui.RouteActions.modeKey = { app.vela.ui.TripShortcut.defaultIcon(_state.value.travelMode) }; app.vela.ui.RouteActions.camerasChanged = { if (_state.value.directionsOpen) route(_state.value.travelMode) } }
+    init { app.vela.ui.SavedActions.rename = ::renamePlace; app.vela.ui.ShapeActions.delete = ::deleteOpenedShape; app.vela.ui.ShapeActions.edit = ::editOpenedShape; app.vela.ui.RouteActions.pinTrip = ::pinTripShortcut; app.vela.ui.RouteActions.modeKey = { app.vela.ui.TripShortcut.defaultIcon(_state.value.travelMode) }; app.vela.ui.RouteActions.camerasChanged = { if (_state.value.directionsOpen) route(_state.value.travelMode) }; app.vela.ui.RouteActions.wazeChanged = { refreshWazeOnActiveRoute(_state.value.activeRoute) } }
 
     // ---- Viewed places, kept for offline (PlaceCache; the storage and the setting are from PR #658) ----
     private fun placeCacheDir(): java.io.File = java.io.File(appContext.filesDir, "placecache")
@@ -6473,6 +6477,7 @@ class MapViewModel @Inject constructor(
     fun selectRoute(index: Int) {
         val picked = _state.value.routes.getOrNull(index) ?: return
         _state.update { it.copy(activeRoute = picked) }
+        refreshWazeOnActiveRoute(picked)
         if (!picked.provisional) return
         namingJob?.cancel()
         namingJob = viewModelScope.launch {
@@ -6647,7 +6652,7 @@ class MapViewModel @Inject constructor(
                 // ABBREVIATED steps + an ETA over un-snapped geometry — so the pre-nav preview showed
                 // wrong turns/ETA that only "corrected" when Start named it. Name it NOW (OSRM snap +
                 // re-applied traffic), exactly as picking an alternate does, so preview == nav.
-                if (routes.firstOrNull()?.provisional == true) selectRoute(0)
+                if (routes.firstOrNull()?.provisional == true) selectRoute(0) else if (routes.isNotEmpty()) refreshWazeOnActiveRoute(routes.first())
                 if (routes.isNotEmpty() && stops.isEmpty() && plan == null) offerSavedRoutes(origin, dest, mode, s.avoidTolls, s.avoidHighways, s.avoidFerries, ::stillWanted)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e // superseded by a newer route()/cleared — don't touch state on a dead job
@@ -6857,7 +6862,7 @@ class MapViewModel @Inject constructor(
     }
     private var routesEpoch = 0 // bumped on each fresh route(); stales an in-flight flock count if a newer route set lands
 
-    /** When "Avoid surveillance cameras" is on, count the ALPR cameras near each route option (the bundled
+    /** When "Avoid surveillance cameras" is on, count the ALPR/surveillance cameras near each route option (the bundled
      *  FlockCameras set; keyless Overpass only until it loads; index-aligned with [routes]) so the picker can badge "passes N cameras" AND auto-prefer
      *  the fewest-camera alternate - but only for a MODEST detour (never send you an hour around a camera
      *  on a 15-minute trip). Off the hot path; a failure just shows no badge and no reroute. */
@@ -6873,14 +6878,14 @@ class MapViewModel @Inject constructor(
         avoidFerries: Boolean,
     ) {
         flockRouteJob?.cancel()
-        val avoidType = app.vela.ui.FlockRouteAlert.typeFor(mode)
-        if (avoidType == app.vela.ui.CameraAvoidType.NONE) {
+        val targets = app.vela.ui.FlockRouteAlert.targetsFor(mode)
+        if (targets.isEmpty()) {
             if (_state.value.flockOnRoute.isNotEmpty()) _state.update { it.copy(flockOnRoute = emptyList()) }
             return
         }
         flockRouteJob = viewModelScope.launch {
             app.vela.data.FlockCameras.ensureLoaded(appContext)
-            if (app.vela.ui.FlockRouteAlert.includeSpeedCameras(avoidType)) {
+            if (app.vela.ui.FlockRouteAlert.includeSpeedCameras(mode, targets)) {
                 app.vela.data.BundledSpeedCameras.ensureLoaded(appContext)
             }
             val liveAlprPool = withContext(Dispatchers.IO) {
@@ -6888,7 +6893,7 @@ class MapViewModel @Inject constructor(
                     runCatching { app.vela.core.data.OverpassAlprCameras.fetchAlong(http, r.polyline, nearMeters = 60.0) }.getOrDefault(emptyList())
                 }
             }
-            val liveSpeedPool = if (app.vela.ui.FlockRouteAlert.includeSpeedCameras(avoidType)) {
+            val liveSpeedPool = if (app.vela.ui.FlockRouteAlert.includeSpeedCameras(mode, targets)) {
                 withContext(Dispatchers.IO) {
                     routes.flatMap { r ->
                         runCatching { app.vela.core.data.OverpassSpeedCameras.fetchAlongCorridor(http, r.polyline, radiusM = 75) }.getOrNull().orEmpty()
@@ -6897,10 +6902,10 @@ class MapViewModel @Inject constructor(
             } else emptyList()
             val counts = withContext(Dispatchers.Default) {
                 routes.map { r ->
-                    camerasMatchingAvoidOnPoly(r.polyline, avoidType, liveAlprPool, liveSpeedPool).size
+                    camerasMatchingAvoidOnPoly(r.polyline, mode, targets, liveAlprPool, liveSpeedPool).size
                 }
             }
-            android.util.Log.i("VelaFlockRoute", "mode=$mode avoidType=$avoidType counts=$counts")
+            android.util.Log.i("VelaFlockRoute", "mode=$mode targets=$targets counts=$counts")
             val cur = _state.value.routes
             if (routesEpoch != epoch || cur.size != counts.size) return@launch
             _state.update { it.copy(flockOnRoute = counts) }
@@ -6930,7 +6935,7 @@ class MapViewModel @Inject constructor(
                     for (i in routesNow.indices) {
                         if (budget[0] <= 0) break
                         if (countsNow[i] <= 0 || routesNow[i].detourPlan.isNotEmpty()) continue
-                        val r = tryCameraDetour(routesNow[i], countsNow[i], eta0, cap, epoch, origin, dest, mode, avoidType, liveAlprPool, liveSpeedPool, stops, avoidTolls, avoidHighways, avoidFerries, budget, tried)
+                        val r = tryCameraDetour(routesNow[i], countsNow[i], eta0, cap, epoch, origin, dest, mode, targets, liveAlprPool, liveSpeedPool, stops, avoidTolls, avoidHighways, avoidFerries, budget, tried)
                         if (routesEpoch != epoch) return@launch
                         if (r != null) results += r
                     }
@@ -6952,18 +6957,23 @@ class MapViewModel @Inject constructor(
 
     private fun camerasMatchingAvoidOnPoly(
         poly: List<LatLng>,
-        avoidType: app.vela.ui.CameraAvoidType,
+        mode: TravelMode,
+        targets: Set<app.vela.ui.CameraAvoidTarget>,
         liveAlprPool: List<app.vela.core.data.AlprCamera>,
         liveSpeedPool: List<app.vela.core.data.SpeedCamera>,
     ): List<LatLng> {
-        if (avoidType == app.vela.ui.CameraAvoidType.NONE || poly.size < 2) return emptyList()
+        if (targets.isEmpty() || poly.size < 2) return emptyList()
         val bundledAlpr = if (app.vela.data.FlockCameras.isLoaded) app.vela.data.FlockCameras.along(poly) else emptyList()
         val liveAlprOnPoly = liveAlprPool.filter {
-            app.vela.core.nav.CameraFacing.onRoute(poly, it.loc, app.vela.core.nav.CameraFacing.parse(it.direction), 45.0)
+            if (it.isAlpr) {
+                app.vela.core.nav.CameraFacing.onRoute(poly, it.loc, app.vela.core.nav.CameraFacing.parse(it.direction), 45.0)
+            } else {
+                app.vela.core.data.OverpassAlprCameras.nearPolyline(it.loc, poly, 50.0)
+            }
         }
         val mergedAlpr = app.vela.data.FlockCameras.mergeAndDedupe(bundledAlpr, liveAlprOnPoly)
-        val filteredAlpr = app.vela.ui.FlockRouteAlert.filterAlprAndSurveillance(mergedAlpr, avoidType).map { it.loc }
-        if (!app.vela.ui.FlockRouteAlert.includeSpeedCameras(avoidType)) return filteredAlpr
+        val filteredAlpr = app.vela.ui.FlockRouteAlert.filterAlprAndSurveillance(mergedAlpr, targets).map { it.loc }
+        if (!app.vela.ui.FlockRouteAlert.includeSpeedCameras(mode, targets)) return filteredAlpr
 
         val bundledSpeed = app.vela.data.BundledSpeedCameras.along(poly, 55.0)
         val bakedSpeed = app.vela.data.RoadFeatures.camerasAlong(poly, 55.0)
@@ -6977,7 +6987,7 @@ class MapViewModel @Inject constructor(
     private suspend fun tryCameraDetour(
         route: Route, routeCount: Int, eta0: Double, cap: Double, epoch: Int,
         origin: LatLng, dest: LatLng, mode: TravelMode,
-        avoidType: app.vela.ui.CameraAvoidType,
+        targets: Set<app.vela.ui.CameraAvoidTarget>,
         liveAlprPool: List<app.vela.core.data.AlprCamera>,
         liveSpeedPool: List<app.vela.core.data.SpeedCamera>,
         stops: List<LatLng>,
@@ -6988,7 +6998,7 @@ class MapViewModel @Inject constructor(
         val poly = route.polyline
         val cum = app.vela.core.nav.RouteProjection.cumulative(poly)
         val cands = withContext(Dispatchers.Default) {
-            val hits = camerasMatchingAvoidOnPoly(poly, avoidType, liveAlprPool, liveSpeedPool)
+            val hits = camerasMatchingAvoidOnPoly(poly, mode, targets, liveAlprPool, liveSpeedPool)
             val along = hits.mapNotNull { loc -> app.vela.core.nav.RouteProjection.alongMeters(poly, cum, loc, 60.0) }
             app.vela.core.nav.CameraDetour.untried(app.vela.core.nav.CameraDetour.candidates(poly, along), tried)
         }
@@ -7010,7 +7020,7 @@ class MapViewModel @Inject constructor(
                     .getOrDefault(emptyList()).firstOrNull() ?: continue
                 if (routesEpoch != epoch) return null
                 val n = withContext(Dispatchers.Default) {
-                    camerasMatchingAvoidOnPoly(r.polyline, avoidType, liveAlprPool, liveSpeedPool).size
+                    camerasMatchingAvoidOnPoly(r.polyline, mode, targets, liveAlprPool, liveSpeedPool).size
                 }
                 val extra = eta(r) - eta0
                 if (n < bestCount && extra <= cap) {
@@ -7023,6 +7033,40 @@ class MapViewModel @Inject constructor(
         }
         android.util.Log.i("VelaFlockRoute", "detour: clusters=${cands.size} requests=$requests (${budget[0]} left) kept=${best != null} cameras $routeCount -> $bestCount")
         return best?.let { it to bestCount }
+    }
+
+    private var wazeJob: kotlinx.coroutines.Job? = null
+
+    fun refreshWazeOnActiveRoute(route: Route? = _state.value.activeRoute) {
+        wazeJob?.cancel()
+        if (!app.vela.ui.WazeAlertsPref.enabled.value || route == null || route.polyline.size < 2) {
+            app.vela.ui.WazeAlertsPref.currentRouteAlerts.value = emptyList()
+            return
+        }
+        wazeJob = viewModelScope.launch {
+            val poly = route.polyline
+            val speedLocs = ArrayList<LatLng>()
+            speedLocs.addAll(_state.value.speedCameras.map { it.loc })
+            if (app.vela.data.BundledSpeedCameras.isLoaded) {
+                speedLocs.addAll(app.vela.data.BundledSpeedCameras.along(poly, 70.0).map { it.loc })
+            }
+            val flockLocs = ArrayList<LatLng>()
+            flockLocs.addAll(_state.value.flockCameras.map { it.loc })
+            if (app.vela.data.FlockCameras.isLoaded) {
+                flockLocs.addAll(app.vela.data.FlockCameras.along(poly).map { it.loc })
+            }
+            val alerts = app.vela.web.WazeLiveFetcher.fetchAlongRoute(
+                context = appContext,
+                http = http,
+                polyline = poly,
+                existingSpeedCams = speedLocs,
+                existingFlockCams = flockLocs,
+            )
+            if (_state.value.activeRoute === route || _state.value.activeRoute?.polyline == poly) {
+                app.vela.ui.WazeAlertsPref.currentRouteAlerts.value = alerts
+                android.util.Log.i("VelaWaze", "Fetched ${alerts.size} Waze alerts along active route")
+            }
+        }
     }
 
     /** Turn-by-turn walking steps between two points (for a transit trip's walk legs), via the
@@ -8869,8 +8913,8 @@ class MapViewModel @Inject constructor(
      *  so a budget GPU isn't colliding the whole ~3.5 km pool each drag frame. Off-screen POIs can't
      *  paint anyway. Preserves `res`'s prominence order (the ambient layer's collision key = index),
      *  so the anchor store still beats its in-store tenant. */
-    private fun keepAmbientForView(res: List<app.vela.core.model.Place>, viewRadiusMeters: Double, zoom: Double): List<app.vela.core.model.Place> =
-        res.asSequence()
+    private fun keepAmbientForView(res: List<app.vela.core.model.Place>, viewRadiusMeters: Double, zoom: Double): List<app.vela.core.model.Place> {
+        val filtered = res.asSequence()
             .filterNot { p -> p.permanentlyClosed }
             .filter { p ->
                 if (viewRadiusMeters <= 0.0) return@filter true
@@ -8887,7 +8931,25 @@ class MapViewModel @Inject constructor(
             )
             .take(ambientCap(zoom))
             .toList()
-            .also { app.vela.ui.map.AmbientStability.remember(it) }
+
+        // Deduplicate fuel stations within 90m to avoid duplicate station icons
+        val seenFuel = ArrayList<LatLng>()
+        val deduped = ArrayList<app.vela.core.model.Place>(filtered.size)
+        for (p in filtered) {
+            val isFuel = p.fuelPrice != null ||
+                p.placeType?.contains("GAS_STATION", ignoreCase = true) == true ||
+                p.category?.contains("fuel", ignoreCase = true) == true ||
+                p.category?.contains("gas", ignoreCase = true) == true ||
+                p.category?.contains("essence", ignoreCase = true) == true
+            if (isFuel) {
+                val dup = seenFuel.any { prev -> prev.distanceTo(p.location) < 90.0 }
+                if (dup) continue
+                seenFuel.add(p.location)
+            }
+            deduped.add(p)
+        }
+        return deduped.also { app.vela.ui.map.AmbientStability.remember(it) }
+    }
 
     fun hasViewport(): Boolean = viewport != null
 
@@ -10202,7 +10264,7 @@ class MapViewModel @Inject constructor(
                 return
             }
             if (all.size <= CONTROLS_ONSCREEN_CAP) {
-                if (_state.value.flockCameras !== all) _state.update { it.copy(flockCameras = all) }
+                if (_state.value.flockCameras !== all) _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(all)) }
                 return
             }
             flockBox?.let { b ->
@@ -10213,7 +10275,7 @@ class MapViewModel @Inject constructor(
             val s = south - padLat; val n = north + padLat; val w = west - padLng; val e = east + padLng
             flockBox = doubleArrayOf(s, w, n, e)
             val kept = capFlock(all.filter { it.loc.lat in s..n && it.loc.lng in w..e }, s, n, w, e)
-            _state.update { it.copy(flockCameras = kept) }
+            _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(kept)) }
             return
         }
         flockBox?.let { b ->
@@ -10227,7 +10289,7 @@ class MapViewModel @Inject constructor(
             app.vela.data.FlockCameras.ensureLoaded(appContext)
             val bundled = withContext(Dispatchers.Default) { app.vela.data.FlockCameras.inBox(s, w, n, e) }
             if (bundled.isNotEmpty()) {
-                _state.update { it.copy(flockCameras = capFlock(bundled, s, n, w, e)) }
+                _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(capFlock(bundled, s, n, w, e))) }
             }
             delay(300)
             val live = if ((east - west) <= 1.2 && (north - south) <= 1.2) {
@@ -10245,7 +10307,7 @@ class MapViewModel @Inject constructor(
             flockBox = doubleArrayOf(s, w, n, e)
             val kept = capFlock(merged, s, n, w, e)
             diag.record("flock", "showing ${kept.size} camera(s) at z${"%.1f".format(zoom)}", "multi-source")
-            _state.update { it.copy(flockCameras = kept) }
+            _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(kept)) }
         }
     }
 

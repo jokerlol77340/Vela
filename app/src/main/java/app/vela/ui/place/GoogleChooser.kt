@@ -700,19 +700,25 @@ internal fun SavedRouteChip(name: String, modifier: Modifier = Modifier) {
 @Composable
 internal fun AvoidCamerasChip(mode: TravelMode = TravelMode.DRIVE) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val currentType = app.vela.ui.FlockRouteAlert.typeFor(mode)
+    val currentTargets = app.vela.ui.FlockRouteAlert.targetsFor(mode)
+    val allowed = app.vela.ui.CameraAvoidTarget.allowedFor(mode)
     var menuOpen by remember { mutableStateOf(false) }
-    val labelRes = when (currentType) {
-        app.vela.ui.CameraAvoidType.NONE -> R.string.place_avoid_short_cameras
-        app.vela.ui.CameraAvoidType.ALPR_ONLY -> R.string.place_avoid_cameras_alpr
-        app.vela.ui.CameraAvoidType.SURVEILLANCE_ONLY -> R.string.place_avoid_cameras_surv
-        app.vela.ui.CameraAvoidType.ALL_CAMERAS -> R.string.place_avoid_cameras_all
+
+    val label = when {
+        currentTargets.isEmpty() -> stringResource(R.string.place_avoid_short_cameras)
+        currentTargets.size == 1 -> when (currentTargets.first()) {
+            app.vela.ui.CameraAvoidTarget.ALPR -> stringResource(R.string.camera_avoid_alpr)
+            app.vela.ui.CameraAvoidTarget.SURVEILLANCE -> stringResource(R.string.camera_avoid_surveillance)
+            app.vela.ui.CameraAvoidTarget.RADAR -> stringResource(R.string.camera_avoid_radar)
+        }
+        else -> "${stringResource(R.string.place_avoid_short_cameras)} (${currentTargets.size})"
     }
+
     Box {
         FilterChip(
-            selected = currentType != app.vela.ui.CameraAvoidType.NONE,
+            selected = currentTargets.isNotEmpty(),
             onClick = { menuOpen = true },
-            label = { Text(stringResource(labelRes)) },
+            label = { Text(label) },
             shape = CircleShape,
             modifier = Modifier.dpadHighlight(CircleShape),
         )
@@ -720,23 +726,47 @@ internal fun AvoidCamerasChip(mode: TravelMode = TravelMode.DRIVE) {
             expanded = menuOpen,
             onDismissRequest = { menuOpen = false },
         ) {
-            val options = listOf(
-                app.vela.ui.CameraAvoidType.NONE to R.string.camera_avoid_none,
-                app.vela.ui.CameraAvoidType.ALPR_ONLY to R.string.camera_avoid_alpr_only,
-                app.vela.ui.CameraAvoidType.SURVEILLANCE_ONLY to R.string.camera_avoid_surveillance_only,
-                app.vela.ui.CameraAvoidType.ALL_CAMERAS to R.string.camera_avoid_all,
-            )
-            options.forEach { (type, textRes) ->
+            allowed.forEach { target ->
+                val isChecked = target in currentTargets
+                val textRes = when (target) {
+                    app.vela.ui.CameraAvoidTarget.ALPR -> R.string.camera_avoid_alpr
+                    app.vela.ui.CameraAvoidTarget.SURVEILLANCE -> R.string.camera_avoid_surveillance
+                    app.vela.ui.CameraAvoidTarget.RADAR -> R.string.camera_avoid_radar
+                }
+                androidx.compose.material3.DropdownMenuItem(
+                    text = {
+                        androidx.compose.foundation.layout.Row(
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            androidx.compose.material3.Checkbox(
+                                checked = isChecked,
+                                onCheckedChange = null,
+                            )
+                            Text(
+                                stringResource(textRes),
+                                fontWeight = if (isChecked) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        }
+                    },
+                    onClick = {
+                        app.vela.ui.FlockRouteAlert.toggleTarget(context, mode, target)
+                        app.vela.ui.RouteActions.camerasChanged?.invoke()
+                    },
+                )
+            }
+            if (currentTargets.isNotEmpty()) {
+                androidx.compose.material3.HorizontalDivider()
                 androidx.compose.material3.DropdownMenuItem(
                     text = {
                         Text(
-                            stringResource(textRes),
-                            fontWeight = if (currentType == type) FontWeight.Bold else FontWeight.Normal,
+                            stringResource(R.string.camera_avoid_none),
+                            color = MaterialTheme.colorScheme.error,
                         )
                     },
                     onClick = {
                         menuOpen = false
-                        app.vela.ui.FlockRouteAlert.setTypeFor(context, mode, type)
+                        app.vela.ui.FlockRouteAlert.setTargetsFor(context, mode, emptySet())
                         app.vela.ui.RouteActions.camerasChanged?.invoke()
                     },
                 )

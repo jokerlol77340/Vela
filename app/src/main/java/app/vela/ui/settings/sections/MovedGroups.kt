@@ -42,69 +42,28 @@ import app.vela.ui.settings.ToggleRow
 
 // Settings groups shared across screens after the 2026-09-17 reshuffle.
 
-/** Surveillance and speed cameras: the map markers and every alert about them, one group
- *  (moved from Map to Navigation, 2026-09-17: they are driving alerts first). */
+/** Surveillance and speed cameras, avoidance, and live Waze alerts: the map markers and every alert about them */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun CameraSettingsGroup() {
     val context = LocalContext.current
-    SettingsGroup(title = stringResource(R.string.settings_flock)) {
-        // 1. Surveillance / plate cameras (Flock)
+
+    // 1. Surveillance and ALPR cameras
+    SettingsGroup(title = stringResource(R.string.settings_cameras_title)) {
         ToggleRow(
-            label = stringResource(R.string.settings_flock_display),
-            checked = app.vela.ui.Flock.on.value,
-            onCheckedChange = { app.vela.ui.Flock.set(context, it) },
-            hint = stringResource(R.string.settings_flock_hint),
+            label = stringResource(R.string.settings_flock_alpr_display),
+            checked = app.vela.ui.Flock.showAlpr.value,
+            onCheckedChange = { app.vela.ui.Flock.setShowAlpr(context, it) },
+            hint = stringResource(R.string.settings_flock_alpr_hint),
             leading = { app.vela.ui.PlateCameraBadge() },
         )
-        androidx.compose.foundation.layout.Column(
-            Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-        ) {
-            Text(
-                stringResource(R.string.settings_flock_avoid_per_mode_title),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-            )
-            Hint(stringResource(R.string.settings_flock_avoid_per_mode_hint))
-            androidx.compose.foundation.layout.Spacer(Modifier.height(6.dp))
-            CameraAvoidModeSelector(
-                modeLabel = stringResource(R.string.settings_flock_mode_drive),
-                selected = app.vela.ui.FlockRouteAlert.driveType.value,
-                onSelect = {
-                    app.vela.ui.FlockRouteAlert.setTypeFor(context, app.vela.core.model.TravelMode.DRIVE, it)
-                    app.vela.ui.RouteActions.camerasChanged?.invoke()
-                },
-            )
-            androidx.compose.foundation.layout.Spacer(Modifier.height(6.dp))
-            CameraAvoidModeSelector(
-                modeLabel = stringResource(R.string.settings_flock_mode_walk),
-                selected = app.vela.ui.FlockRouteAlert.walkType.value,
-                onSelect = {
-                    app.vela.ui.FlockRouteAlert.setTypeFor(context, app.vela.core.model.TravelMode.WALK, it)
-                    app.vela.ui.RouteActions.camerasChanged?.invoke()
-                },
-            )
-            androidx.compose.foundation.layout.Spacer(Modifier.height(6.dp))
-            CameraAvoidModeSelector(
-                modeLabel = stringResource(R.string.settings_flock_mode_bike),
-                selected = app.vela.ui.FlockRouteAlert.bikeType.value,
-                onSelect = {
-                    app.vela.ui.FlockRouteAlert.setTypeFor(context, app.vela.core.model.TravelMode.BICYCLE, it)
-                    app.vela.ui.RouteActions.camerasChanged?.invoke()
-                },
-            )
-        }
-        if (app.vela.ui.FlockRouteAlert.on.value) {
-            ToggleRow(
-                label = stringResource(R.string.settings_flock_detour),
-                checked = app.vela.ui.FlockDetour.on.value,
-                onCheckedChange = {
-                    app.vela.ui.FlockDetour.set(context, it)
-                    app.vela.ui.RouteActions.camerasChanged?.invoke()
-                },
-                hint = stringResource(R.string.settings_flock_detour_hint),
-            )
-        }
+        ToggleRow(
+            label = stringResource(R.string.settings_flock_surveillance_display),
+            checked = app.vela.ui.Flock.showSurveillance.value,
+            onCheckedChange = { app.vela.ui.Flock.setShowSurveillance(context, it) },
+            hint = stringResource(R.string.settings_flock_surveillance_hint),
+            leading = { app.vela.ui.SurveillanceCameraBadge() },
+        )
         ToggleRow(
             label = stringResource(R.string.settings_flock_nav_card),
             checked = app.vela.ui.FlockNavAlert.card.value,
@@ -127,8 +86,8 @@ internal fun CameraSettingsGroup() {
 
     androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
 
+    // 2. Speed cameras (Radars)
     SettingsGroup(title = stringResource(R.string.settings_speed_cams)) {
-        // 2. Speed cameras (Radars)
         ToggleRow(
             label = stringResource(R.string.settings_speed_cams_display),
             checked = app.vela.ui.SpeedCams.on.value,
@@ -152,6 +111,121 @@ internal fun CameraSettingsGroup() {
             CameraDistanceSelector(
                 selectedMeters = app.vela.ui.SpeedCamWarn.distanceMeters.intValue,
                 onSelect = { app.vela.ui.SpeedCamWarn.setDistanceMeters(context, it) },
+            )
+        }
+    }
+
+    androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+
+    // 3. Multi-choice camera & radar avoidance section
+    SettingsGroup(title = stringResource(R.string.settings_camera_avoidance_group_title)) {
+        androidx.compose.foundation.layout.Column(
+            Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+        ) {
+            Hint(stringResource(R.string.settings_camera_avoidance_group_hint))
+            androidx.compose.foundation.layout.Spacer(Modifier.height(6.dp))
+            CameraAvoidModeMultiSelector(
+                modeLabel = stringResource(R.string.settings_flock_mode_drive),
+                mode = app.vela.core.model.TravelMode.DRIVE,
+                selectedTargets = app.vela.ui.FlockRouteAlert.driveTargets.value,
+                onToggleTarget = {
+                    app.vela.ui.FlockRouteAlert.toggleTarget(context, app.vela.core.model.TravelMode.DRIVE, it)
+                    app.vela.ui.RouteActions.camerasChanged?.invoke()
+                },
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+            CameraAvoidModeMultiSelector(
+                modeLabel = stringResource(R.string.settings_flock_mode_walk),
+                mode = app.vela.core.model.TravelMode.WALK,
+                selectedTargets = app.vela.ui.FlockRouteAlert.walkTargets.value,
+                onToggleTarget = {
+                    app.vela.ui.FlockRouteAlert.toggleTarget(context, app.vela.core.model.TravelMode.WALK, it)
+                    app.vela.ui.RouteActions.camerasChanged?.invoke()
+                },
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+            CameraAvoidModeMultiSelector(
+                modeLabel = stringResource(R.string.settings_flock_mode_bike),
+                mode = app.vela.core.model.TravelMode.BICYCLE,
+                selectedTargets = app.vela.ui.FlockRouteAlert.bikeTargets.value,
+                onToggleTarget = {
+                    app.vela.ui.FlockRouteAlert.toggleTarget(context, app.vela.core.model.TravelMode.BICYCLE, it)
+                    app.vela.ui.RouteActions.camerasChanged?.invoke()
+                },
+            )
+        }
+        if (app.vela.ui.FlockRouteAlert.on.value) {
+            ToggleRow(
+                label = stringResource(R.string.settings_flock_detour),
+                checked = app.vela.ui.FlockDetour.on.value,
+                onCheckedChange = {
+                    app.vela.ui.FlockDetour.set(context, it)
+                    app.vela.ui.RouteActions.camerasChanged?.invoke()
+                },
+                hint = stringResource(R.string.settings_flock_detour_hint),
+            )
+        }
+    }
+
+    androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+
+    // 4. Live Waze alerts along active route
+    SettingsGroup(title = stringResource(R.string.settings_waze_alerts_title)) {
+        ToggleRow(
+            label = stringResource(R.string.settings_waze_alerts_enable),
+            checked = app.vela.ui.WazeAlertsPref.enabled.value,
+            onCheckedChange = {
+                app.vela.ui.WazeAlertsPref.setEnabled(context, it)
+                app.vela.ui.RouteActions.wazeChanged?.invoke()
+            },
+            hint = stringResource(R.string.settings_waze_alerts_hint),
+            leading = { app.vela.ui.WazePoliceBadge() },
+        )
+        if (app.vela.ui.WazeAlertsPref.enabled.value) {
+            androidx.compose.foundation.layout.Column(
+                Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            ) {
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(
+                        selected = app.vela.ui.WazeAlertsPref.showPolice.value,
+                        onClick = {
+                            app.vela.ui.WazeAlertsPref.setShowPolice(context, !app.vela.ui.WazeAlertsPref.showPolice.value)
+                        },
+                        label = { Text(stringResource(R.string.settings_waze_police)) },
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
+                    )
+                    FilterChip(
+                        selected = app.vela.ui.WazeAlertsPref.showHazards.value,
+                        onClick = {
+                            app.vela.ui.WazeAlertsPref.setShowHazards(context, !app.vela.ui.WazeAlertsPref.showHazards.value)
+                        },
+                        label = { Text(stringResource(R.string.settings_waze_hazards)) },
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
+                    )
+                    FilterChip(
+                        selected = app.vela.ui.WazeAlertsPref.showAccidents.value,
+                        onClick = {
+                            app.vela.ui.WazeAlertsPref.setShowAccidents(context, !app.vela.ui.WazeAlertsPref.showAccidents.value)
+                        },
+                        label = { Text(stringResource(R.string.settings_waze_accidents)) },
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
+                    )
+                }
+            }
+            ToggleRow(
+                label = stringResource(R.string.settings_waze_nav_card),
+                checked = app.vela.ui.WazeAlertsPref.cardWarn.value,
+                onCheckedChange = { app.vela.ui.WazeAlertsPref.setCardWarn(context, it) },
+                hint = stringResource(R.string.settings_waze_nav_card_hint),
+            )
+            ToggleRow(
+                label = stringResource(R.string.settings_waze_nav_voice),
+                checked = app.vela.ui.WazeAlertsPref.voiceWarn.value,
+                onCheckedChange = { app.vela.ui.WazeAlertsPref.setVoiceWarn(context, it) },
+                hint = stringResource(R.string.settings_waze_nav_voice_hint),
             )
         }
     }
@@ -200,17 +274,13 @@ private fun CameraDistanceSelector(
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun CameraAvoidModeSelector(
+private fun CameraAvoidModeMultiSelector(
     modeLabel: String,
-    selected: app.vela.ui.CameraAvoidType,
-    onSelect: (app.vela.ui.CameraAvoidType) -> Unit,
+    mode: app.vela.core.model.TravelMode,
+    selectedTargets: Set<app.vela.ui.CameraAvoidTarget>,
+    onToggleTarget: (app.vela.ui.CameraAvoidTarget) -> Unit,
 ) {
-    val options = listOf(
-        app.vela.ui.CameraAvoidType.NONE to R.string.camera_avoid_none,
-        app.vela.ui.CameraAvoidType.ALPR_ONLY to R.string.camera_avoid_alpr_only,
-        app.vela.ui.CameraAvoidType.SURVEILLANCE_ONLY to R.string.camera_avoid_surveillance_only,
-        app.vela.ui.CameraAvoidType.ALL_CAMERAS to R.string.camera_avoid_all,
-    )
+    val allowed = app.vela.ui.CameraAvoidTarget.allowedFor(mode)
     androidx.compose.foundation.layout.Column {
         Text(
             modeLabel,
@@ -219,11 +289,17 @@ private fun CameraAvoidModeSelector(
             modifier = Modifier.padding(bottom = 2.dp),
         )
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            val focus = remember { List(options.size) { FocusRequester() } }
-            options.forEachIndexed { i, (type, labelRes) ->
+            val focus = remember { List(allowed.size) { FocusRequester() } }
+            allowed.forEachIndexed { i, target ->
+                val isSelected = target in selectedTargets
+                val labelRes = when (target) {
+                    app.vela.ui.CameraAvoidTarget.ALPR -> R.string.camera_avoid_alpr
+                    app.vela.ui.CameraAvoidTarget.SURVEILLANCE -> R.string.camera_avoid_surveillance
+                    app.vela.ui.CameraAvoidTarget.RADAR -> R.string.camera_avoid_radar
+                }
                 FilterChip(
-                    selected = selected == type,
-                    onClick = { onSelect(type) },
+                    selected = isSelected,
+                    onClick = { onToggleTarget(target) },
                     label = { Text(stringResource(labelRes)) },
                     shape = androidx.compose.foundation.shape.CircleShape,
                     modifier = Modifier

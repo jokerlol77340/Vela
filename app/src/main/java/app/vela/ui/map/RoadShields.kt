@@ -126,16 +126,25 @@ internal object RoadShields {
     }
 
     fun applyScales(style: Style, shieldScale: Float, exitScale: Float) {
+        val shieldVis = if (shieldScale <= 0f) Property.NONE else Property.VISIBLE
         val shieldProps = arrayOf(
-            PropertyFactory.iconSize(1f * shieldScale),
-            PropertyFactory.textSize(11f * shieldScale),
+            PropertyFactory.visibility(shieldVis),
+            PropertyFactory.iconSize(if (shieldScale <= 0f) 0.001f else 1f * shieldScale),
+            PropertyFactory.textSize(if (shieldScale <= 0f) 0.001f else 11f * shieldScale),
+            PropertyFactory.iconOpacity(if (shieldScale <= 0f) 0f else 1f),
+            PropertyFactory.textOpacity(if (shieldScale <= 0f) 0f else 1f),
         )
         (style.getLayer("highway-shield-us-interstate") as? SymbolLayer)?.setProperties(*shieldProps)
         (style.getLayer("road_shield_us") as? SymbolLayer)?.setProperties(*shieldProps)
         (style.getLayer("highway-shield-non-us") as? SymbolLayer)?.setProperties(*shieldProps)
+
+        val exitVis = if (exitScale <= 0f) Property.NONE else Property.VISIBLE
         (style.getLayer(EXIT_LAYER) as? SymbolLayer)?.setProperties(
-            PropertyFactory.iconSize(1f * exitScale),
-            PropertyFactory.textSize(9.5f * exitScale),
+            PropertyFactory.visibility(exitVis),
+            PropertyFactory.iconSize(if (exitScale <= 0f) 0.001f else 1f * exitScale),
+            PropertyFactory.textSize(if (exitScale <= 0f) 0.001f else 9.5f * exitScale),
+            PropertyFactory.iconOpacity(if (exitScale <= 0f) 0f else 1f),
+            PropertyFactory.textOpacity(if (exitScale <= 0f) 0f else 1f),
         )
     }
 

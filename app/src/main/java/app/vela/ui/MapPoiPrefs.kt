@@ -28,6 +28,7 @@ object MapPoiPrefs {
     /** Individual multipliers for each route/navigation pictogram on the map. */
     val speedcamScale = mutableFloatStateOf(1.0f)
     val flockScale = mutableFloatStateOf(1.0f)
+    val surveillanceCamScale = mutableFloatStateOf(1.0f)
     val signalScale = mutableFloatStateOf(1.0f)
     val stopSignScale = mutableFloatStateOf(1.0f)
     val railCrossingScale = mutableFloatStateOf(1.0f)
@@ -76,6 +77,7 @@ object MapPoiPrefs {
         iconScale.floatValue = p.getFloat(KEY_SCALE, 1.0f)
         speedcamScale.floatValue = p.getFloat(KEY_SPEEDCAM_SCALE, 1.0f)
         flockScale.floatValue = p.getFloat(KEY_FLOCK_SCALE, 1.0f)
+        surveillanceCamScale.floatValue = p.getFloat(KEY_SURV_CAM_SCALE, 1.0f)
         signalScale.floatValue = p.getFloat(KEY_SIGNAL_SCALE, 1.0f)
         stopSignScale.floatValue = p.getFloat(KEY_STOP_SCALE, 1.0f)
         railCrossingScale.floatValue = p.getFloat(KEY_RAILX_SCALE, 1.0f)
@@ -167,6 +169,11 @@ object MapPoiPrefs {
         prefs(context).edit().putFloat(KEY_FLOCK_SCALE, value).apply()
     }
 
+    fun setSurveillanceCamScale(context: Context, value: Float) {
+        surveillanceCamScale.floatValue = value
+        prefs(context).edit().putFloat(KEY_SURV_CAM_SCALE, value).apply()
+    }
+
     fun setSignalScale(context: Context, value: Float) {
         signalScale.floatValue = value
         prefs(context).edit().putFloat(KEY_SIGNAL_SCALE, value).apply()
@@ -229,6 +236,7 @@ object MapPoiPrefs {
     private const val KEY_SCALE = "map_poi_icon_scale"
     private const val KEY_SPEEDCAM_SCALE = "map_nav_speedcam_scale"
     private const val KEY_FLOCK_SCALE = "map_nav_flock_scale"
+    private const val KEY_SURV_CAM_SCALE = "map_nav_surv_cam_scale"
     private const val KEY_SIGNAL_SCALE = "map_nav_signal_scale"
     private const val KEY_STOP_SCALE = "map_nav_stop_scale"
     private const val KEY_RAILX_SCALE = "map_nav_railx_scale"

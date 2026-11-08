@@ -318,6 +318,8 @@ private fun AppearanceIconsTab(context: Context) {
     SettingsGroup(title = stringResource(R.string.settings_nav_icon_scale)) {
         val speedcamBmp = remember { app.vela.ui.map.speedCamBitmap() }
         val flockBmp = remember { app.vela.ui.map.alprCameraBitmap() }
+        val survBmp = remember { app.vela.ui.map.surveillanceCameraBitmap() }
+        val wazeBmp = remember { app.vela.ui.map.wazePoliceBitmap() }
         val signalBmp = remember { app.vela.ui.map.trafficLightBitmap() }
         val stopBmp = remember { app.vela.ui.map.stopSignBitmap() }
         val railxBmp = remember { app.vela.ui.map.railCrossingBitmap() }
@@ -330,10 +332,20 @@ private fun AppearanceIconsTab(context: Context) {
                 app.vela.ui.MapPoiPrefs.speedcamScale.floatValue,
             ) { app.vela.ui.MapPoiPrefs.setSpeedcamScale(context, it) },
             PictogramRow(
-                R.string.settings_nav_icon_flock,
+                R.string.settings_nav_icon_alpr_cam,
                 flockBmp,
                 app.vela.ui.MapPoiPrefs.flockScale.floatValue,
             ) { app.vela.ui.MapPoiPrefs.setFlockScale(context, it) },
+            PictogramRow(
+                R.string.settings_nav_icon_surveillance_cam,
+                survBmp,
+                app.vela.ui.MapPoiPrefs.surveillanceCamScale.floatValue,
+            ) { app.vela.ui.MapPoiPrefs.setSurveillanceCamScale(context, it) },
+            PictogramRow(
+                R.string.settings_nav_icon_waze,
+                wazeBmp,
+                app.vela.ui.WazeAlertsPref.wazeIconScale.floatValue,
+            ) { app.vela.ui.WazeAlertsPref.setWazeIconScale(context, it) },
             PictogramRow(
                 R.string.settings_nav_icon_signal,
                 signalBmp,
@@ -356,9 +368,10 @@ private fun AppearanceIconsTab(context: Context) {
             ) { app.vela.ui.MapPoiPrefs.setSpeedHumpScale(context, it) },
         )
 
+        val uniformScales = listOf(0f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.25f, 2.5f)
         PictogramRowsList(
             rows = navRows,
-            scales = listOf(1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.25f, 2.5f, 2.75f),
+            scales = uniformScales,
         )
         androidx.compose.foundation.layout.Column(Modifier.padding(horizontal = 16.dp)) {
             Hint(stringResource(R.string.settings_nav_icon_scale_hint))
@@ -417,9 +430,10 @@ private fun AppearanceIconsTab(context: Context) {
             ) { app.vela.ui.MapPoiPrefs.setSavedPinScale(context, it) },
         )
 
+        val uniformScales = listOf(0f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.25f, 2.5f)
         PictogramRowsList(
             rows = mapRows,
-            scales = listOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.25f, 2.5f),
+            scales = uniformScales,
         )
         androidx.compose.foundation.layout.Column(Modifier.padding(horizontal = 16.dp)) {
             Hint(stringResource(R.string.settings_map_icon_scale_hint))
@@ -444,17 +458,20 @@ private fun PictogramRowsList(
                 modifier = Modifier.padding(bottom = 4.dp),
             ) {
                 val img = remember(row.bitmap) { row.bitmap.asImageBitmap() }
-                val previewDp = (22f * row.currentScale).dp
+                val isHidden = row.currentScale <= 0f
+                val previewDp = if (isHidden) 22.dp else (22f * row.currentScale).dp
                 androidx.compose.foundation.Image(
                     bitmap = img,
                     contentDescription = stringResource(row.labelRes),
                     modifier = Modifier.size(previewDp),
+                    alpha = if (isHidden) 0.35f else 1.0f,
                     filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
                 )
                 Text(
                     text = stringResource(row.labelRes),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
+                    color = if (isHidden) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface,
                 )
             }
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -463,7 +480,7 @@ private fun PictogramRowsList(
                     FilterChip(
                         selected = kotlin.math.abs(row.currentScale - f) < 0.01f,
                         onClick = { row.onScaleChange(f) },
-                        label = { Text("${(f * 100).toInt()}%") },
+                        label = { Text(if (f <= 0f) stringResource(R.string.pictogram_hidden) else "${(f * 100).toInt()}%") },
                         shape = androidx.compose.foundation.shape.CircleShape,
                         modifier = Modifier
                             .dpadHighlight(androidx.compose.foundation.shape.CircleShape)
