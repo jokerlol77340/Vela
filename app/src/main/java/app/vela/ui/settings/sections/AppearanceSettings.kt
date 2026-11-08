@@ -457,7 +457,6 @@ private fun AppearanceIconsTab(context: Context) {
         val cultureBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "culture") ?: pinBmp }
         val civicBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "civic") ?: pinBmp }
         val parkBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "park") ?: pinBmp }
-        val poiBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "default") ?: pinBmp }
 
         val mapRows = listOf(
             PictogramRow(
@@ -629,18 +628,6 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.MapPoiPrefs.setTransitStopShowInNav(context, it) },
             ),
             PictogramRow(
-                R.string.settings_map_icon_poi_place,
-                poiBmp,
-                app.vela.ui.MapPoiPrefs.poiPlaceScale.floatValue,
-                { app.vela.ui.MapPoiPrefs.setPoiPlaceScale(context, it) },
-                app.vela.ui.MapPoiPrefs.poiPlaceMinZoom.floatValue,
-                { app.vela.ui.MapPoiPrefs.setPoiPlaceMinZoom(context, it) },
-                app.vela.ui.MapPoiPrefs.poiPlaceShowInMap.value,
-                { app.vela.ui.MapPoiPrefs.setPoiPlaceShowInMap(context, it) },
-                app.vela.ui.MapPoiPrefs.poiPlaceShowInNav.value,
-                { app.vela.ui.MapPoiPrefs.setPoiPlaceShowInNav(context, it) },
-            ),
-            PictogramRow(
                 R.string.settings_map_icon_saved_pin,
                 pinBmp,
                 app.vela.ui.MapPoiPrefs.savedPinScale.floatValue,
@@ -671,115 +658,125 @@ private fun PictogramRowsList(
     rows: List<PictogramRow>,
     scales: List<Float>,
 ) {
-    val zoomLevels = listOf(0f, 0.01f, 8f, 10f, 11f, 12f, 13f, 14f, 15f, 16f)
+    val zoomLevels = remember { listOf(0f, 0.01f, 8f, 10f, 11f, 12f, 13f, 14f, 15f, 16f) }
     rows.forEachIndexed { rowIdx, row ->
         if (rowIdx > 0) GroupDivider()
-        androidx.compose.foundation.layout.Column(
-            Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+        PictogramRowItem(row = row, scales = scales, zoomLevels = zoomLevels)
+    }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun PictogramRowItem(
+    row: PictogramRow,
+    scales: List<Float>,
+    zoomLevels: List<Float>,
+) {
+    androidx.compose.foundation.layout.Column(
+        Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+    ) {
+        androidx.compose.foundation.layout.Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(bottom = 4.dp),
         ) {
-            androidx.compose.foundation.layout.Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.padding(bottom = 4.dp),
-            ) {
-                val img = remember(row.bitmap) { row.bitmap.asImageBitmap() }
-                val isHidden = row.currentScale <= 0f
-                val previewDp = if (isHidden) 22.dp else (22f * row.currentScale).dp
-                androidx.compose.foundation.Image(
-                    bitmap = img,
-                    contentDescription = stringResource(row.labelRes),
-                    modifier = Modifier.size(previewDp),
-                    alpha = if (isHidden) 0.35f else 1.0f,
-                    filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
-                )
-                Text(
-                    text = stringResource(row.labelRes),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isHidden) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface,
+            val img = remember(row.bitmap) { row.bitmap.asImageBitmap() }
+            val isHidden = row.currentScale <= 0f
+            val previewDp = if (isHidden) 22.dp else (22f * row.currentScale).dp
+            androidx.compose.foundation.Image(
+                bitmap = img,
+                contentDescription = stringResource(row.labelRes),
+                modifier = Modifier.size(previewDp),
+                alpha = if (isHidden) 0.35f else 1.0f,
+                filterQuality = androidx.compose.ui.graphics.FilterQuality.High,
+            )
+            Text(
+                text = stringResource(row.labelRes),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = if (isHidden) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        // 1. Sizing chips
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val navIconFocus = remember(scales.size) { List(scales.size) { FocusRequester() } }
+            scales.forEachIndexed { i, f ->
+                FilterChip(
+                    selected = kotlin.math.abs(row.currentScale - f) < 0.01f,
+                    onClick = { row.onScaleChange(f) },
+                    label = { Text(if (f <= 0f) stringResource(R.string.pictogram_hidden) else "${(f * 100).toInt()}%") },
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    modifier = Modifier
+                        .dpadHighlight(androidx.compose.foundation.shape.CircleShape)
+                        .dpadRowSibling(navIconFocus, i),
                 )
             }
-            // 1. Sizing chips
+        }
+        if (row.currentScale > 0f) {
+            // 2. Minimum zoom chips
+            androidx.compose.foundation.layout.Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+            ) {
+                Text(
+                    stringResource(R.string.pictogram_min_zoom),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                val navIconFocus = remember { List(scales.size) { FocusRequester() } }
-                scales.forEachIndexed { i, f ->
+                val zoomFocus = remember(zoomLevels.size) { List(zoomLevels.size) { FocusRequester() } }
+                zoomLevels.forEachIndexed { i, z ->
+                    val isSelected = when {
+                        z <= 0f -> row.currentMinZoom <= 0f
+                        z <= 0.05f -> row.currentMinZoom in 0.001f..0.05f
+                        else -> kotlin.math.abs(row.currentMinZoom - z) < 0.1f
+                    }
                     FilterChip(
-                        selected = kotlin.math.abs(row.currentScale - f) < 0.01f,
-                        onClick = { row.onScaleChange(f) },
-                        label = { Text(if (f <= 0f) stringResource(R.string.pictogram_hidden) else "${(f * 100).toInt()}%") },
+                        selected = isSelected,
+                        onClick = { row.onMinZoomChange(z) },
+                        label = {
+                            Text(
+                                when {
+                                    z <= 0f -> stringResource(R.string.pictogram_zoom_default)
+                                    z <= 0.05f -> "z0"
+                                    else -> "z${z.toInt()}"
+                                }
+                            )
+                        },
                         shape = androidx.compose.foundation.shape.CircleShape,
                         modifier = Modifier
                             .dpadHighlight(androidx.compose.foundation.shape.CircleShape)
-                            .dpadRowSibling(navIconFocus, i),
+                            .dpadRowSibling(zoomFocus, i),
                     )
                 }
             }
-            if (row.currentScale > 0f) {
-                // 2. Minimum zoom chips
-                androidx.compose.foundation.layout.Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
-                ) {
-                    Text(
-                        stringResource(R.string.pictogram_min_zoom),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val zoomFocus = remember { List(zoomLevels.size) { FocusRequester() } }
-                    zoomLevels.forEachIndexed { i, z ->
-                        val isSelected = when {
-                            z <= 0f -> row.currentMinZoom <= 0f
-                            z <= 0.05f -> row.currentMinZoom in 0.001f..0.05f
-                            else -> kotlin.math.abs(row.currentMinZoom - z) < 0.1f
-                        }
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { row.onMinZoomChange(z) },
-                            label = {
-                                Text(
-                                    when {
-                                        z <= 0f -> stringResource(R.string.pictogram_zoom_default)
-                                        z <= 0.05f -> "z0"
-                                        else -> "z${z.toInt()}"
-                                    }
-                                )
-                            },
-                            shape = androidx.compose.foundation.shape.CircleShape,
-                            modifier = Modifier
-                                .dpadHighlight(androidx.compose.foundation.shape.CircleShape)
-                                .dpadRowSibling(zoomFocus, i),
-                        )
-                    }
-                }
-                // 3. Display mode chips (Carte & Nav as independent toggles)
-                androidx.compose.foundation.layout.Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
-                ) {
-                    Text(
-                        stringResource(R.string.pictogram_display_mode),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(
-                        selected = row.showInMap,
-                        onClick = { row.onShowInMapChange(!row.showInMap) },
-                        label = { Text(stringResource(R.string.pictogram_mode_map)) },
-                        shape = androidx.compose.foundation.shape.CircleShape,
-                        modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
-                    )
-                    FilterChip(
-                        selected = row.showInNav,
-                        onClick = { row.onShowInNavChange(!row.showInNav) },
-                        label = { Text(stringResource(R.string.pictogram_mode_nav)) },
-                        shape = androidx.compose.foundation.shape.CircleShape,
-                        modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
-                    )
-                }
+            // 3. Display mode chips (Carte & Nav as independent toggles)
+            androidx.compose.foundation.layout.Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+            ) {
+                Text(
+                    stringResource(R.string.pictogram_display_mode),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FilterChip(
+                    selected = row.showInMap,
+                    onClick = { row.onShowInMapChange(!row.showInMap) },
+                    label = { Text(stringResource(R.string.pictogram_mode_map)) },
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
+                )
+                FilterChip(
+                    selected = row.showInNav,
+                    onClick = { row.onShowInNavChange(!row.showInNav) },
+                    label = { Text(stringResource(R.string.pictogram_mode_nav)) },
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
+                )
             }
         }
     }

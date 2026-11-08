@@ -156,16 +156,13 @@ internal fun CameraSettingsGroup() {
         }
         if (app.vela.ui.FlockRouteAlert.on.value) {
             GroupDivider()
-            val curMode = app.vela.ui.FlockDetour.mode.value
-            SelectableRow(
-                label = stringResource(R.string.settings_flock_detour_disabled),
-                selected = curMode == app.vela.ui.CameraAvoidDetourMode.DISABLED,
-                onClick = {
-                    app.vela.ui.FlockDetour.setMode(context, app.vela.ui.CameraAvoidDetourMode.DISABLED)
-                    app.vela.ui.RouteActions.camerasChanged?.invoke()
-                },
-                hint = stringResource(R.string.settings_flock_detour_disabled_hint),
-            )
+            val curMode = if (app.vela.ui.FlockDetour.mode.value == app.vela.ui.CameraAvoidDetourMode.DISABLED) {
+                app.vela.ui.CameraAvoidDetourMode.MODERATE.also {
+                    app.vela.ui.FlockDetour.setMode(context, it)
+                }
+            } else {
+                app.vela.ui.FlockDetour.mode.value
+            }
             SelectableRow(
                 label = app.vela.ui.FlockDetour.dynamicModerateLabel(context),
                 selected = curMode == app.vela.ui.CameraAvoidDetourMode.MODERATE,

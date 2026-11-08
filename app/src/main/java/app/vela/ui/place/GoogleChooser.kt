@@ -493,7 +493,6 @@ fun GoogleStyleDirectionsPanel(
                                         )
                                     }
                                     AvoidCamerasChip(mode = currentMode)
-                                    AvoidDetourChip(mode = currentMode)
                                 }
                                 if (currentMode == TravelMode.DRIVE && (avoidTolls || avoidHighways || avoidFerries) && routes.isNotEmpty() && routes.all { it.avoidNotHonored }) {
                                     Row(Modifier.padding(start = 20.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
@@ -769,7 +768,6 @@ internal fun AvoidCamerasChip(mode: TravelMode = TravelMode.DRIVE) {
                     )
                 }
                 val detourOptions = listOf(
-                    app.vela.ui.CameraAvoidDetourMode.DISABLED to R.string.settings_flock_detour_disabled,
                     app.vela.ui.CameraAvoidDetourMode.MODERATE to R.string.camera_detour_chip_moderate,
                     app.vela.ui.CameraAvoidDetourMode.TOTAL_AVOIDANCE to R.string.settings_flock_detour_total,
                 )

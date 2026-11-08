@@ -1933,7 +1933,6 @@ fun DirectionsPanel(
                         )
                     }
                     AvoidCamerasChip(mode = currentMode)
-                    AvoidDetourChip(mode = currentMode)
                 }
                 // Honesty note: with a toggle on but no offline region covering the trip, the online
                 // routers cannot honor it and used to just quietly route through tolls/highways

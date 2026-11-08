@@ -43,15 +43,22 @@ object PoiIcons {
         Triple("default", 0xe55f, "#5F6368"),
     )
 
+    private val markerCache = java.util.concurrent.ConcurrentHashMap<String, Bitmap>()
+
     /** The category color for a dot group (the ambient mini-dot tier tints circles with it). */
     fun colorFor(group: String): String = GROUPS.firstOrNull { it.first == group }?.third ?: "#5F6368"
 
     /** The map's own marker for [group] (the same glyph and color the ambient icon uses), for the
      *  car's list rows; null when the icon font is not available. */
     fun groupMarker(context: Context, group: String): Bitmap? {
+        val sat = satellite
+        val key = "$group-$sat"
+        markerCache[key]?.let { return it }
         val tf = typeface(context) ?: return null
         val (_, codepoint, color) = GROUPS.firstOrNull { it.first == group } ?: GROUPS.first { it.first == "default" }
-        return marker(tf, codepoint, color)
+        val bmp = marker(tf, codepoint, color)
+        markerCache[key] = bmp
+        return bmp
     }
 
     /** [colorFor] as a style expression over a feature's baked `group` property, for tile-sourced
