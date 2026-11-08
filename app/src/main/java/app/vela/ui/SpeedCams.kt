@@ -12,14 +12,33 @@ import androidx.compose.runtime.mutableStateOf
  */
 object SpeedCams {
     val on = mutableStateOf(false)
+    internal var syncing = false
 
     fun init(context: Context) {
-        on.value = prefs(context).getBoolean(KEY, false)
+        val p = prefs(context)
+        on.value = p.getBoolean(KEY, false)
+        val pPoi = context.getSharedPreferences("vela_settings", Context.MODE_PRIVATE)
+        if (pPoi.contains(MapPoiPrefs.KEY_SPEEDCAM_SCALE)) {
+            val sc = pPoi.getFloat(MapPoiPrefs.KEY_SPEEDCAM_SCALE, 1.0f)
+            if (sc <= 0f) on.value = false
+        }
     }
 
     fun set(context: Context, value: Boolean) {
         on.value = value
         prefs(context).edit().putBoolean(KEY, value).apply()
+        if (!syncing) {
+            syncing = true
+            try {
+                if (!value) {
+                    MapPoiPrefs.setSpeedcamScale(context, 0f)
+                } else if (MapPoiPrefs.speedcamScale.floatValue <= 0f) {
+                    MapPoiPrefs.setSpeedcamScale(context, 1.0f)
+                }
+            } finally {
+                syncing = false
+            }
+        }
     }
 
     private fun prefs(c: Context) = c.getSharedPreferences("vela_settings", Context.MODE_PRIVATE)

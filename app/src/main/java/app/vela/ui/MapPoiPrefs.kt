@@ -78,6 +78,15 @@ object MapPoiPrefs {
         speedcamScale.floatValue = p.getFloat(KEY_SPEEDCAM_SCALE, 1.0f)
         flockScale.floatValue = p.getFloat(KEY_FLOCK_SCALE, 1.0f)
         surveillanceCamScale.floatValue = p.getFloat(KEY_SURV_CAM_SCALE, 1.0f)
+
+        if (!Flock.showAlpr.value && flockScale.floatValue > 0f) flockScale.floatValue = 0f
+        else if (Flock.showAlpr.value && flockScale.floatValue <= 0f) Flock.showAlpr.value = false
+
+        if (!Flock.showSurveillance.value && surveillanceCamScale.floatValue > 0f) surveillanceCamScale.floatValue = 0f
+        else if (Flock.showSurveillance.value && surveillanceCamScale.floatValue <= 0f) Flock.showSurveillance.value = false
+
+        if (!SpeedCams.on.value && speedcamScale.floatValue > 0f) speedcamScale.floatValue = 0f
+        else if (SpeedCams.on.value && speedcamScale.floatValue <= 0f) SpeedCams.on.value = false
         signalScale.floatValue = p.getFloat(KEY_SIGNAL_SCALE, 1.0f)
         stopSignScale.floatValue = p.getFloat(KEY_STOP_SCALE, 1.0f)
         railCrossingScale.floatValue = p.getFloat(KEY_RAILX_SCALE, 1.0f)
@@ -162,16 +171,52 @@ object MapPoiPrefs {
     fun setSpeedcamScale(context: Context, value: Float) {
         speedcamScale.floatValue = value
         prefs(context).edit().putFloat(KEY_SPEEDCAM_SCALE, value).apply()
+        if (!SpeedCams.syncing) {
+            SpeedCams.syncing = true
+            try {
+                if (value <= 0f && SpeedCams.on.value) {
+                    SpeedCams.set(context, false)
+                } else if (value > 0f && !SpeedCams.on.value) {
+                    SpeedCams.set(context, true)
+                }
+            } finally {
+                SpeedCams.syncing = false
+            }
+        }
     }
 
     fun setFlockScale(context: Context, value: Float) {
         flockScale.floatValue = value
         prefs(context).edit().putFloat(KEY_FLOCK_SCALE, value).apply()
+        if (!Flock.syncing) {
+            Flock.syncing = true
+            try {
+                if (value <= 0f && Flock.showAlpr.value) {
+                    Flock.setShowAlpr(context, false)
+                } else if (value > 0f && !Flock.showAlpr.value) {
+                    Flock.setShowAlpr(context, true)
+                }
+            } finally {
+                Flock.syncing = false
+            }
+        }
     }
 
     fun setSurveillanceCamScale(context: Context, value: Float) {
         surveillanceCamScale.floatValue = value
         prefs(context).edit().putFloat(KEY_SURV_CAM_SCALE, value).apply()
+        if (!Flock.syncing) {
+            Flock.syncing = true
+            try {
+                if (value <= 0f && Flock.showSurveillance.value) {
+                    Flock.setShowSurveillance(context, false)
+                } else if (value > 0f && !Flock.showSurveillance.value) {
+                    Flock.setShowSurveillance(context, true)
+                }
+            } finally {
+                Flock.syncing = false
+            }
+        }
     }
 
     fun setSignalScale(context: Context, value: Float) {
@@ -234,9 +279,9 @@ object MapPoiPrefs {
     private const val KEY_TRANSIT = "map_show_transit_stops"
     private const val KEY_CIVIC = "map_show_civic_pois"
     private const val KEY_SCALE = "map_poi_icon_scale"
-    private const val KEY_SPEEDCAM_SCALE = "map_nav_speedcam_scale"
-    private const val KEY_FLOCK_SCALE = "map_nav_flock_scale"
-    private const val KEY_SURV_CAM_SCALE = "map_nav_surv_cam_scale"
+    internal const val KEY_SPEEDCAM_SCALE = "map_nav_speedcam_scale"
+    internal const val KEY_FLOCK_SCALE = "map_nav_flock_scale"
+    internal const val KEY_SURV_CAM_SCALE = "map_nav_surv_cam_scale"
     private const val KEY_SIGNAL_SCALE = "map_nav_signal_scale"
     private const val KEY_STOP_SCALE = "map_nav_stop_scale"
     private const val KEY_RAILX_SCALE = "map_nav_railx_scale"

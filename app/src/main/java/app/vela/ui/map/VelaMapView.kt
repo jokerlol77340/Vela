@@ -4726,6 +4726,7 @@ fun VelaMapView(
                         app.vela.ui.StartCamera.of(c.latitude, c.longitude, map.cameraPosition.zoom)?.let { app.vela.ui.StartView.live = it }
                     }
                     runOvlGate()
+                    map.getStyle()?.let { st -> if (st.isFullyLoaded) dedupeFuelStations(map, st) }
                     // Idle building warm-up: schedule after a beat of stillness; any camera move
                     // cancels it (the move-started listener below).
                     warmPending[0]?.let { warmHandler.removeCallbacks(it) }
@@ -4946,6 +4947,7 @@ fun VelaMapView(
                     ovlRenderSettled[0] = true
                     ovlDirty[0] = true
                     runOvlGate()
+                    map.getStyle()?.let { st -> if (st.isFullyLoaded) dedupeFuelStations(map, st) }
                     osmFillPending[0]?.let { osmFillHandler.removeCallbacks(it) }
                     val fill = Runnable { osmFillPending[0] = null; map.getStyle()?.let { st -> if (st.isFullyLoaded) osmFillIn(map, st) } }
                     osmFillPending[0] = fill
@@ -7012,6 +7014,95 @@ internal fun applyPoiTierFilters(style: StyleLayers, fuelOnly: Boolean) {
     tier("poi_r20", 20, null)
 }
 
+/** Deduplicates fuel stations intra-source and cross-source (Overture and OSM basemap).
+ *  Runs autonomously on camera idle settle, eliminating duplicated fuel station forecourt pins. */
+private fun dedupeFuelStations(map: MapLibreMap, style: Style) {
+    if (map.cameraPosition.zoom < 11.0) return
+    val box = RectF(0f, 0f, map.width, map.height)
+
+    // 1. DEDUPLICATE OPEN PLACES FUEL (Overture/Vela places)
+    val openLayers = style.layers.map { it.id }.filter { it.startsWith("vela-places-") && !it.startsWith("vela-places-dots-") }
+    val openFuelLocations = ArrayList<LatLng>()
+    if (openLayers.isNotEmpty()) {
+        val openFuelRendered: List<Feature> = runCatching {
+            map.queryRenderedFeatures(
+                box,
+                Expression.any(
+                    Expression.eq(Expression.get("group"), Expression.literal("fuel")),
+                    Expression.eq(Expression.get("class"), Expression.literal("fuel")),
+                ),
+                *openLayers.toTypedArray(),
+            )
+        }.getOrNull().orEmpty()
+
+        class OpenFuelItem(val id: String, val name: String, val loc: LatLng)
+        val fuelItems = openFuelRendered.mapNotNull { f ->
+            val id = (f.id() ?: f.getStringProperty("id") ?: f.getNumberProperty("id")?.toString()).orEmpty()
+            if (id.isEmpty()) return@mapNotNull null
+            val n = f.getStringProperty("name") ?: ""
+            val pt = f.geometry() as? Point ?: return@mapNotNull null
+            OpenFuelItem(id, n, LatLng(pt.latitude(), pt.longitude()))
+        }
+        val newFuelDisplaced = HashSet<String>()
+        val keptOpenFuel = ArrayList<OpenFuelItem>()
+        for (item in fuelItems) {
+            val existing = keptOpenFuel.firstOrNull { it.loc.distanceTo(item.loc) < 180.0 }
+            if (existing != null) {
+                val isBrand = { s: String ->
+                    val l = s.lowercase()
+                    l.contains("total") || l.contains("shell") || l.contains("bp") || l.contains("esso") || l.contains("avia") || l.contains("eni") || l.contains("station")
+                }
+                val itemScore = (if (isBrand(item.name)) 100 else 0) + item.name.length
+                val existScore = (if (isBrand(existing.name)) 100 else 0) + existing.name.length
+                if (itemScore > existScore) {
+                    newFuelDisplaced += existing.id
+                    keptOpenFuel.remove(existing)
+                    keptOpenFuel.add(item)
+                } else {
+                    newFuelDisplaced += item.id
+                }
+            } else {
+                keptOpenFuel.add(item)
+            }
+        }
+        keptOpenFuel.forEach { openFuelLocations += it.loc }
+
+        if (newFuelDisplaced != openFuelDisplacedIds) {
+            openFuelDisplacedIds = newFuelDisplaced
+            applyOpenPlacesHidden(style)
+        }
+    }
+
+    // 2. DEDUPLICATE OSM BASEMAP FUEL (poi_r1, poi_r7, poi_r20)
+    val poiLayers = OSM_POI_LAYERS.filter { style.getLayer(it) != null && (style.getLayer(it) as? SymbolLayer)?.visibility?.value != Property.NONE }
+    if (poiLayers.isNotEmpty()) {
+        val osmFeatures = runCatching { map.queryRenderedFeatures(box, *poiLayers.toTypedArray()) }.getOrNull().orEmpty()
+        val osmFuelFeatures = osmFeatures.filter { f ->
+            f.getStringProperty("class") == "fuel" || f.getStringProperty("subclass") == "fuel"
+        }
+        if (osmFuelFeatures.isNotEmpty()) {
+            val already = osmPoiExclude.toHashSet()
+            val add = LinkedHashSet<String>()
+            val osmKeptFuel = ArrayList<LatLng>()
+            for (f in osmFuelFeatures) {
+                val pt = f.geometry() as? Point ?: continue
+                val n = f.getStringProperty("name") ?: continue
+                if (n in already) continue
+                val ll = LatLng(pt.latitude(), pt.longitude())
+                if (openFuelLocations.any { it.distanceTo(ll) < 180.0 } || osmKeptFuel.any { it.distanceTo(ll) < 180.0 }) {
+                    add += n
+                } else {
+                    osmKeptFuel += ll
+                }
+            }
+            if (add.isNotEmpty()) {
+                osmPoiExclude = (osmPoiExclude + add).takeLast(OSM_EXCLUDE_MAX)
+                applyPoiTierFilters(style, lastPoiFuelOnly ?: false)
+            }
+        }
+    }
+}
+
 /** OSM fills in what the open places layer lacks (2026-09-15). The poi tiers used to hide
  *  outright while an open source covered the view, which also hid every business Overture does
  *  not have (an OSM-only museum vanished in Vela-data mode). Now they stay up and this drops, by
@@ -7021,6 +7112,7 @@ internal fun applyPoiTierFilters(style: StyleLayers, fuelOnly: Boolean) {
  *  tier filters re-apply. Runs on camera idle, debounced; cheap next to a fan-out, and a no-op
  *  when nothing changed. Without open sources the list clears so the tiers draw as before. */
 private fun osmFillIn(map: MapLibreMap, style: Style) {
+    dedupeFuelStations(map, style)
     // A rendered-feature query costs tens of milliseconds on the main thread in a dense view even
     // when it returns nothing (measured 37-55 ms with the layers hidden), so skip it when there is
     // nothing to test and THROTTLE it otherwise: once per 2.5 s at most, and only after the camera
@@ -7048,63 +7140,10 @@ private fun osmFillIn(map: MapLibreMap, style: Style) {
     val poiLayers = OSM_POI_LAYERS.filter { style.getLayer(it) != null }
     if (poiLayers.isEmpty()) return
     val box = RectF(0f, 0f, map.width, map.height)
-    // VIEWPORT ONLY, and only what is DRAWN (2026-09-16). The first cut asked querySourceFeatures
-    // for every feature in every loaded tile on both sources, which marshals thousands of features
-    // across JNI and stalled the main thread up to 169 ms per settle in downtown Davis (measured:
-    // 47 map frames over 33 ms in a pan-and-zoom sequence there, 8 over farmland). Rendered queries
-    // return what is on screen, and an OSM point already excluded is no longer drawn, so it is
-    // never tested again.
+    // VIEWPORT ONLY, and only what is DRAWN (2026-09-16).
     val osm = runCatching { map.queryRenderedFeatures(box, *poiLayers.toTypedArray()) }.getOrNull().orEmpty()
     val open = HashMap<String, ArrayList<LatLng>>()
     val openFuel = ArrayList<LatLng>()
-
-    // ALWAYS query all rendered fuel features in openLayers so they can be deduped intra-source AND against OSM
-    val openFuelRendered: List<Feature> = runCatching {
-        map.queryRenderedFeatures(
-            box,
-            Expression.any(
-                Expression.eq(Expression.get("group"), Expression.literal("fuel")),
-                Expression.eq(Expression.get("class"), Expression.literal("fuel")),
-            ),
-            *openLayers.toTypedArray(),
-        )
-    }.getOrNull().orEmpty()
-
-    val newFuelDisplaced = HashSet<String>()
-    class OpenFuelItem(val id: String, val name: String, val loc: LatLng)
-    val fuelItems = openFuelRendered.mapNotNull { f ->
-        val id = f.getStringProperty("id") ?: return@mapNotNull null
-        val n = f.getStringProperty("name") ?: ""
-        val pt = f.geometry() as? Point ?: return@mapNotNull null
-        OpenFuelItem(id, n, LatLng(pt.latitude(), pt.longitude()))
-    }
-    val keptOpenFuel = ArrayList<OpenFuelItem>()
-    for (item in fuelItems) {
-        val existing = keptOpenFuel.firstOrNull { it.loc.distanceTo(item.loc) < 150.0 }
-        if (existing != null) {
-            val isBrand = { s: String ->
-                val l = s.lowercase()
-                l.contains("total") || l.contains("shell") || l.contains("bp") || l.contains("esso") || l.contains("avia") || l.contains("eni") || l.contains("station")
-            }
-            val itemScore = (if (isBrand(item.name)) 100 else 0) + item.name.length
-            val existScore = (if (isBrand(existing.name)) 100 else 0) + existing.name.length
-            if (itemScore > existScore) {
-                newFuelDisplaced += existing.id
-                keptOpenFuel.remove(existing)
-                keptOpenFuel.add(item)
-            } else {
-                newFuelDisplaced += item.id
-            }
-        } else {
-            keptOpenFuel.add(item)
-        }
-    }
-    keptOpenFuel.forEach { openFuel += it.loc }
-
-    if (newFuelDisplaced != openFuelDisplacedIds) {
-        openFuelDisplacedIds = newFuelDisplaced
-        applyOpenPlacesHidden(style)
-    }
 
     // With OSM's businesses shown (osmBusinessesOn), every open icon can twin one, so the open side
     // is the whole icon set; otherwise only the groups an OSM non-business point can match.

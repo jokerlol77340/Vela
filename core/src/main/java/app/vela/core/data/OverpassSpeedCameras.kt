@@ -33,7 +33,7 @@ object OverpassSpeedCameras {
     private fun slow(base: OkHttpClient): OkHttpClient =
         slowHttp ?: base.newBuilder()
             .callTimeout(15, TimeUnit.SECONDS)
-            .connectTimeout(8, TimeUnit.SECONDS)
+            .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .build()
             .also { slowHttp = it }
@@ -47,9 +47,8 @@ object OverpassSpeedCameras {
         limit: Int = 4000,
     ): List<SpeedCamera>? {
         val box = "($south,$west,$north,$east)"
-        // `out body`, never `out tags` - `out tags` omits a node's lat/lon (the empty-layer trap
-        // the ALPR fetcher hit).
-        val query = "[out:json][timeout:25];(node[\"highway\"=\"speed_camera\"]$box;node[\"enforcement\"~\"maxspeed|average_speed|traffic_signals\"]$box;);out body $limit;"
+        // `out body qt` prints id, lat, lon with quadtile sorting for sub-second execution.
+        val query = "[out:json][timeout:15];(node[\"highway\"=\"speed_camera\"]$box;node[\"enforcement\"~\"maxspeed|average_speed|traffic_signals\"]$box;);out body qt $limit;"
         return OverpassEndpoints.run(slow(http), query) { body ->
             val parsed = json.decodeFromStream<SpeedCamResp>(body.byteStream())
             parsed.elements.mapNotNull { n ->

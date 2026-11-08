@@ -13,25 +13,28 @@ object Flock {
     val showAlpr = mutableStateOf(true)
     val showSurveillance = mutableStateOf(true)
     var refreshNow: (() -> Unit)? = null
+    internal var syncing = false
 
     fun init(context: Context) {
         val p = prefs(context)
         val master = p.getBoolean(KEY, true)
         showAlpr.value = p.getBoolean(KEY_ALPR, master)
         showSurveillance.value = p.getBoolean(KEY_SURV, master)
+        val pPoi = context.getSharedPreferences("vela_settings", Context.MODE_PRIVATE)
+        if (pPoi.contains(MapPoiPrefs.KEY_FLOCK_SCALE)) {
+            val sc = pPoi.getFloat(MapPoiPrefs.KEY_FLOCK_SCALE, 1.0f)
+            if (sc <= 0f) showAlpr.value = false
+        }
+        if (pPoi.contains(MapPoiPrefs.KEY_SURV_CAM_SCALE)) {
+            val sc = pPoi.getFloat(MapPoiPrefs.KEY_SURV_CAM_SCALE, 1.0f)
+            if (sc <= 0f) showSurveillance.value = false
+        }
         on.value = showAlpr.value || showSurveillance.value
     }
 
     fun set(context: Context, value: Boolean) {
-        showAlpr.value = value
-        showSurveillance.value = value
-        on.value = value
-        prefs(context).edit()
-            .putBoolean(KEY, value)
-            .putBoolean(KEY_ALPR, value)
-            .putBoolean(KEY_SURV, value)
-            .apply()
-        refreshNow?.invoke()
+        setShowAlpr(context, value)
+        setShowSurveillance(context, value)
     }
 
     fun setShowAlpr(context: Context, value: Boolean) {
@@ -41,6 +44,18 @@ object Flock {
             .putBoolean(KEY_ALPR, value)
             .putBoolean(KEY, on.value)
             .apply()
+        if (!syncing) {
+            syncing = true
+            try {
+                if (!value) {
+                    MapPoiPrefs.setFlockScale(context, 0f)
+                } else if (MapPoiPrefs.flockScale.floatValue <= 0f) {
+                    MapPoiPrefs.setFlockScale(context, 1.0f)
+                }
+            } finally {
+                syncing = false
+            }
+        }
         refreshNow?.invoke()
     }
 
@@ -51,6 +66,18 @@ object Flock {
             .putBoolean(KEY_SURV, value)
             .putBoolean(KEY, on.value)
             .apply()
+        if (!syncing) {
+            syncing = true
+            try {
+                if (!value) {
+                    MapPoiPrefs.setSurveillanceCamScale(context, 0f)
+                } else if (MapPoiPrefs.surveillanceCamScale.floatValue <= 0f) {
+                    MapPoiPrefs.setSurveillanceCamScale(context, 1.0f)
+                }
+            } finally {
+                syncing = false
+            }
+        }
         refreshNow?.invoke()
     }
 

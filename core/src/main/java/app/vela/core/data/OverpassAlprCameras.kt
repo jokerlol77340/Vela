@@ -44,7 +44,7 @@ object OverpassAlprCameras {
     private fun slow(base: OkHttpClient): OkHttpClient =
         slowHttp ?: base.newBuilder()
             .callTimeout(15, TimeUnit.SECONDS)
-            .connectTimeout(8, TimeUnit.SECONDS)
+            .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .build()
             .also { slowHttp = it }
@@ -63,11 +63,12 @@ object OverpassAlprCameras {
         limit: Int = 4000,
     ): List<AlprCamera>? {
         val box = "($south,$west,$north,$east)"
-        // `out body` (NOT `out tags`): for a node, `out tags` prints only id + tags and OMITS
-        // lat/lon, so the parser dropped every camera (no coordinates) and the layer drew nothing.
-        // `out body` prints id, lat, lon AND tags - what we need to place the marker + read operator.
-        val query = "[out:json][timeout:25];" +
-            "(node[\"surveillance:type\"~\"ALPR|ANPR\",i]$box;node[\"camera:type\"~\"ALPR|ANPR\",i]$box;node[\"man_made\"=\"surveillance\"]$box;);out body $limit;"
+        // `out body qt` prints id, lat, lon AND tags with quadtile sorting for sub-second execution.
+        val query = "[out:json][timeout:15];" +
+            "(node[\"man_made\"=\"surveillance\"]$box;" +
+            "node[\"surveillance:type\"]$box;" +
+            "node[\"camera:type\"]$box;" +
+            "node[\"man_made\"=\"camera\"]$box;);out body qt $limit;"
         // Failover across mirrors: a 504 from the primary overpass-api.de (common under load) used to fail
         // the whole fetch and silently blank the layer. run() returns null only when EVERY endpoint fails.
         return OverpassEndpoints.run(slow(http), query) { body ->
