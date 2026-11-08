@@ -1597,6 +1597,15 @@
     <string name="settings_nav_avoid_highways_hint">Avoid motorways and expressways by default when driving.</string>
     <string name="settings_nav_avoid_ferries_hint">Avoid ferry crossings by default.</string>
     <string name="settings_cameras_title">Cameras (Surveillance and ALPR)</string>
+    <string name="settings_alpr_cams_title">License plate reading cameras (ALPR)</string>
+    <string name="settings_surveillance_cams_title">Surveillance cameras (CCTV)</string>
+    <string name="settings_surveillance_display">Show surveillance cameras on map</string>
+    <string name="settings_surveillance_nav_card">Surveillance camera heads-up</string>
+    <string name="settings_surveillance_nav_card_hint">While navigating, shows a card as you get close to a surveillance camera on your route. Off by default.</string>
+    <string name="settings_surveillance_nav_voice">Say when a surveillance camera is ahead</string>
+    <string name="settings_surveillance_nav_voice_hint">While navigating, says \"Surveillance camera ahead\" as you get close to one on your route. Follows your spoken-directions setting. Off by default.</string>
+    <string name="nav_surveillance_camera_ahead">Surveillance camera ahead</string>
+    <string name="nav_surveillance_cameras_ahead">Surveillance cameras ahead</string>
     <string name="settings_flock_alpr_display">License plate reading cameras</string>
     <string name="settings_flock_alpr_hint">Displays automated license plate readers (ALPR/LAPI/Flock) on the map.</string>
     <string name="settings_flock_surveillance_display">Surveillance cameras</string>

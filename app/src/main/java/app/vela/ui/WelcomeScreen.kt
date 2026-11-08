@@ -81,6 +81,8 @@ fun WelcomeScreen(vm: app.vela.ui.map.MapViewModel, onGetStarted: () -> Unit) {
         FlockRouteAlert.set(context, avoidCameras)
         FlockNavAlert.setCard(context, warnCameras)
         FlockNavAlert.setVoice(context, warnCameras)
+        SurveillanceNavAlert.setCard(context, warnCameras)
+        SurveillanceNavAlert.setVoice(context, warnCameras)
         vm.setTripRecording(saveTrips)
         vm.setTripAutoClear(clearTrips)
         onGetStarted()

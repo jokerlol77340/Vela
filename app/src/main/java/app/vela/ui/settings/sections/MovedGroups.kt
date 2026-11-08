@@ -48,21 +48,14 @@ import app.vela.ui.settings.ToggleRow
 internal fun CameraSettingsGroup() {
     val context = LocalContext.current
 
-    // 1. Surveillance and ALPR cameras
-    SettingsGroup(title = stringResource(R.string.settings_cameras_title)) {
+    // 1. License Plate Reading Cameras (ALPR / LAPI)
+    SettingsGroup(title = stringResource(R.string.settings_alpr_cams_title)) {
         ToggleRow(
             label = stringResource(R.string.settings_flock_alpr_display),
             checked = app.vela.ui.Flock.showAlpr.value,
             onCheckedChange = { app.vela.ui.Flock.setShowAlpr(context, it) },
             hint = stringResource(R.string.settings_flock_alpr_hint),
             leading = { app.vela.ui.PlateCameraBadge() },
-        )
-        ToggleRow(
-            label = stringResource(R.string.settings_flock_surveillance_display),
-            checked = app.vela.ui.Flock.showSurveillance.value,
-            onCheckedChange = { app.vela.ui.Flock.setShowSurveillance(context, it) },
-            hint = stringResource(R.string.settings_flock_surveillance_hint),
-            leading = { app.vela.ui.SurveillanceCameraBadge() },
         )
         ToggleRow(
             label = stringResource(R.string.settings_flock_nav_card),
@@ -80,6 +73,37 @@ internal fun CameraSettingsGroup() {
             CameraDistanceSelector(
                 selectedMeters = app.vela.ui.FlockNavAlert.distanceMeters.intValue,
                 onSelect = { app.vela.ui.FlockNavAlert.setDistanceMeters(context, it) },
+            )
+        }
+    }
+
+    androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
+
+    // 2. Surveillance cameras (CCTV)
+    SettingsGroup(title = stringResource(R.string.settings_surveillance_cams_title)) {
+        ToggleRow(
+            label = stringResource(R.string.settings_surveillance_display),
+            checked = app.vela.ui.Flock.showSurveillance.value,
+            onCheckedChange = { app.vela.ui.Flock.setShowSurveillance(context, it) },
+            hint = stringResource(R.string.settings_flock_surveillance_hint),
+            leading = { app.vela.ui.SurveillanceCameraBadge() },
+        )
+        ToggleRow(
+            label = stringResource(R.string.settings_surveillance_nav_card),
+            checked = app.vela.ui.SurveillanceNavAlert.card.value,
+            onCheckedChange = { app.vela.ui.SurveillanceNavAlert.setCard(context, it) },
+            hint = stringResource(R.string.settings_surveillance_nav_card_hint),
+        )
+        ToggleRow(
+            label = stringResource(R.string.settings_surveillance_nav_voice),
+            checked = app.vela.ui.SurveillanceNavAlert.voice.value,
+            onCheckedChange = { app.vela.ui.SurveillanceNavAlert.setVoice(context, it) },
+            hint = stringResource(R.string.settings_surveillance_nav_voice_hint),
+        )
+        if (app.vela.ui.SurveillanceNavAlert.any) {
+            CameraDistanceSelector(
+                selectedMeters = app.vela.ui.SurveillanceNavAlert.distanceMeters.intValue,
+                onSelect = { app.vela.ui.SurveillanceNavAlert.setDistanceMeters(context, it) },
             )
         }
     }

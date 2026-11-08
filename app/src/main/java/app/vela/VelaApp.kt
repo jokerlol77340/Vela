@@ -162,6 +162,7 @@ class VelaApp : Application(), coil.ImageLoaderFactory {
         app.vela.ui.FlockRouteAlert.init(this) // load the persisted "warn about cameras on route" toggle
         app.vela.ui.FlockDetour.init(this) // side-street detours around cameras (issue #600), nested under it
         app.vela.ui.FlockNavAlert.init(this) // plate-camera card + spoken alert while navigating, off by default
+        app.vela.ui.SurveillanceNavAlert.init(this) // surveillance camera card + spoken alert while navigating, off by default
         app.vela.ui.WazeAlertsPref.init(this) // live one-shot Waze alerts on route, on by default
         // Parse the bundled on-device ALPR/Flock camera dataset off the main thread (map layer draws
         // instantly, route counts are reliable), then refresh from the hosted manifest so the data updates

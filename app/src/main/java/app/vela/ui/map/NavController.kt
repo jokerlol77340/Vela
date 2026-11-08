@@ -181,7 +181,7 @@ internal class NavController(
                     if (ns.navigating && toStop != null) app.vela.ui.nav.NavLegFigures.Leg(toStop, ns.nav.remainingDistance, ns.nav.remainingDuration) else null
                 // Speak an approach warning for a camera coming up (issue #229). Cheap per tick:
                 // a scan of a short list; the projection was done once when the route landed.
-                if (ns.navigating) { maybeWarnCamera(ns); maybeWarnFlock(ns); maybeWarnWaze(ns); maybeWarnSpeeding(); maybeWarnBridge(ns) }
+                if (ns.navigating) { maybeWarnCamera(ns); maybeWarnFlock(ns); maybeWarnSurveillance(ns); maybeWarnWaze(ns); maybeWarnSpeeding(); maybeWarnBridge(ns) }
                 _state.update {
                     it.copy(
                         navigating = ns.navigating,
@@ -254,10 +254,13 @@ internal class NavController(
                     refreshRouteSpeedCams(r)
                 }
         }
-        // Same for the plate-camera alerts: turning either one on mid-drive projects the current
+        // Same for the plate-camera and surveillance camera alerts: turning either one on mid-drive projects the current
         // route's cameras now; turning both off clears them.
         scope.launch {
-            androidx.compose.runtime.snapshotFlow { app.vela.ui.FlockNavAlert.card.value || app.vela.ui.FlockNavAlert.voice.value }
+            androidx.compose.runtime.snapshotFlow {
+                app.vela.ui.FlockNavAlert.card.value || app.vela.ui.FlockNavAlert.voice.value ||
+                app.vela.ui.SurveillanceNavAlert.card.value || app.vela.ui.SurveillanceNavAlert.voice.value
+            }
                 .collect { on ->
                     val r = navSession.state.value.route ?: return@collect
                     if (!navSession.state.value.navigating) return@collect
@@ -1208,11 +1211,19 @@ internal class NavController(
     private var routeFlockGroups: List<app.vela.core.nav.CameraAlerts.Group> = emptyList()
     private var routeFlockMeters: List<Double> = emptyList()
     private var alertedFlock: Set<Int> = emptySet()
+
+    // General surveillance camera groups on CURRENT route
+    private var routeSurvGroups: List<app.vela.core.nav.CameraAlerts.Group> = emptyList()
+    private var routeSurvMeters: List<Double> = emptyList()
+    private var alertedSurv: Set<Int> = emptySet()
+
     private var routeFlockJob: kotlinx.coroutines.Job? = null
 
     private fun clearRouteFlock() {
         routeFlockJob?.cancel()
-        routeFlockKey = null; routeFlockGroups = emptyList(); routeFlockMeters = emptyList(); alertedFlock = emptySet()
+        routeFlockKey = null
+        routeFlockGroups = emptyList(); routeFlockMeters = emptyList(); alertedFlock = emptySet()
+        routeSurvGroups = emptyList(); routeSurvMeters = emptyList(); alertedSurv = emptySet()
     }
 
     // Live Waze alerts along active route
@@ -1228,28 +1239,24 @@ internal class NavController(
         alertedWaze = emptySet()
     }
 
-    /** Project the plate cameras that can see this route onto it, once per driven route. The
-     *  bundled dataset is in memory, so this is local work, no network. Only cameras that face
-     *  along the route count ([app.vela.data.FlockCameras.along]); ones within 40 m of each other
-     *  along the route become one announcement. No-op unless either alert is on. */
+    /** Project the plate and surveillance cameras that can see this route onto it, once per driven route. */
     private fun refreshRouteFlock(route: app.vela.core.model.Route) {
-        if (!app.vela.ui.FlockNavAlert.any) { clearRouteFlock(); return }
+        val wantAlpr = app.vela.ui.FlockNavAlert.any
+        val wantSurv = app.vela.ui.SurveillanceNavAlert.any
+        if (!wantAlpr && !wantSurv) { clearRouteFlock(); return }
         val poly = route.polyline
         if (poly.size < 2) return
         val f = poly.first(); val l = poly.last()
         val key = String.format(
-            java.util.Locale.US, "%.4f,%.4f|%.4f,%.4f|%d",
-            f.lat, f.lng, l.lat, l.lng, (route.distanceMeters / 500).toInt(),
+            java.util.Locale.US, "%.4f,%.4f|%.4f,%.4f|%d|%b|%b",
+            f.lat, f.lng, l.lat, l.lng, (route.distanceMeters / 500).toInt(), wantAlpr, wantSurv,
         )
         if (key == routeFlockKey) return
         routeFlockJob?.cancel()
         routeFlockKey = key
-        // A genuinely new route: nothing announced on it, and nothing known on it yet (a reroute
-        // resets traveledM, so the old route's distances would point at cameras left behind).
         alertedFlock = emptySet(); routeFlockGroups = emptyList(); routeFlockMeters = emptyList()
+        alertedSurv = emptySet(); routeSurvGroups = emptyList(); routeSurvMeters = emptyList()
         routeFlockJob = scope.launch {
-            // The dataset parses off the main thread at launch; a drive started in the first
-            // seconds waits for it rather than silently getting no alerts for the whole route.
             var waited = 0
             while (!app.vela.data.FlockCameras.isLoaded && waited < 60) { kotlinx.coroutines.delay(1000); waited++ }
             if (!app.vela.data.FlockCameras.isLoaded) return@launch
@@ -1258,22 +1265,30 @@ internal class NavController(
                     app.vela.core.data.OverpassAlprCameras.fetchAlong(http, poly, nearMeters = 45.0)
                 }
             }.getOrDefault(emptyList())
-            val groups = withContext(Dispatchers.Default) {
+            val (alprGroups, survGroups) = withContext(Dispatchers.Default) {
                 val cams = app.vela.data.FlockCameras.mergeAndDedupe(app.vela.data.FlockCameras.along(poly), liveAlpr)
                 val cum = app.vela.core.nav.RouteProjection.cumulative(poly)
-                val meters = cams.mapNotNull { app.vela.core.nav.RouteProjection.alongMeters(poly, cum, it.loc, 45.0) }.sorted()
-                app.vela.core.nav.CameraAlerts.group(meters)
+                val alpr = if (wantAlpr) {
+                    val m = cams.filter { it.isAlpr }.mapNotNull { app.vela.core.nav.RouteProjection.alongMeters(poly, cum, it.loc, 45.0) }.sorted()
+                    app.vela.core.nav.CameraAlerts.group(m)
+                } else emptyList()
+                val surv = if (wantSurv) {
+                    val m = cams.filter { !it.isAlpr }.mapNotNull { app.vela.core.nav.RouteProjection.alongMeters(poly, cum, it.loc, 45.0) }.sorted()
+                    app.vela.core.nav.CameraAlerts.group(m)
+                } else emptyList()
+                alpr to surv
             }
             if (routeFlockKey == key) {
-                routeFlockGroups = groups
-                routeFlockMeters = groups.map { it.atM }
-                diag.record("flock", "${groups.sumOf { it.count }} plate camera(s) on route in ${groups.size} group(s)", "bundled")
+                routeFlockGroups = alprGroups
+                routeFlockMeters = alprGroups.map { it.atM }
+                routeSurvGroups = survGroups
+                routeSurvMeters = survGroups.map { it.atM }
+                diag.record("flock", "${alprGroups.sumOf { it.count }} plate cam(s), ${survGroups.sumOf { it.count }} surveillance cam(s) on route", "bundled")
             }
         }
     }
 
-    /** Announce the plate-camera group coming up, once each: a heads-up card, a spoken line, or
-     *  both, per the two settings. Timing is the speed-camera warning's ([CameraAlerts.due]). */
+    /** Announce the plate-camera group coming up, once each. */
     private fun maybeWarnFlock(ns: app.vela.core.nav.NavSession.State) {
         if (routeFlockMeters.isEmpty() || !app.vela.ui.FlockNavAlert.any) return
         val customDist = app.vela.ui.FlockNavAlert.distanceMeters.intValue.takeIf { it > 0 }?.toDouble()
@@ -1286,6 +1301,22 @@ internal class NavController(
         )
         if (app.vela.ui.FlockNavAlert.card.value) host.flashStatus(msg, 6000L)
         if (app.vela.ui.FlockNavAlert.voice.value) alert(msg)
+        app.vela.car.CarBridge.toast(msg)
+    }
+
+    /** Announce the surveillance camera group coming up, once each. */
+    private fun maybeWarnSurveillance(ns: app.vela.core.nav.NavSession.State) {
+        if (routeSurvMeters.isEmpty() || !app.vela.ui.SurveillanceNavAlert.any) return
+        val customDist = app.vela.ui.SurveillanceNavAlert.distanceMeters.intValue.takeIf { it > 0 }?.toDouble()
+        val i = app.vela.core.nav.CameraAlerts.due(
+            routeSurvMeters, ns.nav.traveledM, (_state.value.mySpeed ?: 0f).toDouble(), alertedSurv, customDist,
+        ) ?: return
+        alertedSurv = alertedSurv + i
+        val msg = appContext.getString(
+            if (routeSurvGroups[i].count > 1) R.string.nav_surveillance_cameras_ahead else R.string.nav_surveillance_camera_ahead,
+        )
+        if (app.vela.ui.SurveillanceNavAlert.card.value) host.flashStatus(msg, 6000L)
+        if (app.vela.ui.SurveillanceNavAlert.voice.value) alert(msg)
         app.vela.car.CarBridge.toast(msg)
     }
 
@@ -1339,13 +1370,14 @@ internal class NavController(
         maybeWarnSpeeding()
         val wantCams = app.vela.ui.SpeedCamWarn.any
         val wantFlock = app.vela.ui.FlockNavAlert.any
-        if (!wantCams && !wantFlock) return
+        val wantSurv = app.vela.ui.SurveillanceNavAlert.any
+        if (!wantCams && !wantFlock && !wantSurv) return
         val speed = (_state.value.mySpeed ?: 0f).toDouble()
         if (bearingDeg == null || speed < app.vela.core.nav.CameraAlerts.MOVING_FLOOR_MPS) return
         val now = android.os.SystemClock.elapsedRealtime()
         val from = driveScanFrom
         if (driveScanJob?.isActive != true && (from == null || now - driveScanAtMs >= DRIVE_SCAN_MS || from.distanceTo(here) >= DRIVE_SCAN_M)) {
-            scanAhead(here, bearingDeg, wantCams, wantFlock)
+            scanAhead(here, bearingDeg, wantCams, wantFlock, wantSurv)
         }
         if (from == null) return
         val since = from.distanceTo(here)
@@ -1372,23 +1404,35 @@ internal class NavController(
                 app.vela.car.CarBridge.toast(msg)
             }
         }
+        if (wantSurv) {
+            val customDist = app.vela.ui.SurveillanceNavAlert.distanceMeters.intValue.takeIf { it > 0 }?.toDouble()
+            app.vela.core.nav.CameraAlerts.dueKeyed(driveSurv, since, speed, driveAnnouncedSurv, customDist)?.let { key ->
+                driveAnnouncedSurv = driveAnnouncedSurv + key
+                val msg = appContext.getString(
+                    if ((driveSurvCount[key] ?: 1) > 1) R.string.nav_surveillance_cameras_ahead else R.string.nav_surveillance_camera_ahead,
+                )
+                if (app.vela.ui.SurveillanceNavAlert.card.value) host.flashStatus(msg, 6000L)
+                if (app.vela.ui.SurveillanceNavAlert.voice.value) alert(msg)
+                app.vela.car.CarBridge.toast(msg)
+            }
+        }
     }
 
     // Driving mode's look ahead (issue #727): the cameras along a straight line ahead of the car,
-    // rescanned every DRIVE_SCAN_MS or DRIVE_SCAN_M, as (key, meters ahead at the scan). Announced
-    // by key, since the lists are rebuilt each scan. Speed cameras come from the baked road
-    // features only (a corridor fetch per scan would be a request storm); plate cameras from the
-    // bundled set. A camera past a bend ahead is outside the line's corridor and not seen.
+    // rescanned every DRIVE_SCAN_MS or DRIVE_SCAN_M, as (key, meters ahead at the scan).
     private var driveScanAtMs = 0L
     private var driveScanFrom: app.vela.core.model.LatLng? = null
     private var driveScanJob: kotlinx.coroutines.Job? = null
     private var driveCams: List<Pair<String, Double>> = emptyList()
     private var driveFlock: List<Pair<String, Double>> = emptyList()
     private var driveFlockCount: Map<String, Int> = emptyMap()
+    private var driveSurv: List<Pair<String, Double>> = emptyList()
+    private var driveSurvCount: Map<String, Int> = emptyMap()
     private var driveAnnouncedCams: Set<String> = emptySet()
     private var driveAnnouncedFlock: Set<String> = emptySet()
+    private var driveAnnouncedSurv: Set<String> = emptySet()
 
-    private fun scanAhead(here: app.vela.core.model.LatLng, bearingDeg: Double, wantCams: Boolean, wantFlock: Boolean) {
+    private fun scanAhead(here: app.vela.core.model.LatLng, bearingDeg: Double, wantCams: Boolean, wantFlock: Boolean, wantSurv: Boolean) {
         driveScanJob = scope.launch {
             val line = listOf(here, aheadOf(here, bearingDeg, DRIVE_AHEAD_M))
             val cum = app.vela.core.nav.RouteProjection.cumulative(line)
@@ -1401,24 +1445,41 @@ internal class NavController(
                 }
                 else -> emptyList()
             }
-            val flock = if (!wantFlock || !app.vela.data.FlockCameras.isLoaded) emptyList() else withContext(Dispatchers.Default) {
-                app.vela.data.FlockCameras.along(line, DRIVE_CORRIDOR_M)
-                    .mapNotNull { c -> app.vela.core.nav.RouteProjection.alongMeters(line, cum, c.loc, DRIVE_CORRIDOR_M)?.let { key(c.loc) to it } }
+            val (flockGroups, flockCounts, survGroups, survCounts) = if ((!wantFlock && !wantSurv) || !app.vela.data.FlockCameras.isLoaded) {
+                Quad(emptyList(), emptyMap(), emptyList(), emptyMap())
+            } else withContext(Dispatchers.Default) {
+                val along = app.vela.data.FlockCameras.along(line, DRIVE_CORRIDOR_M)
+                    .mapNotNull { c -> app.vela.core.nav.RouteProjection.alongMeters(line, cum, c.loc, DRIVE_CORRIDOR_M)?.let { c to it } }
                     .sortedBy { it.second }
+
+                fun buildGroup(list: List<Pair<app.vela.core.data.AlprCamera, Double>>): Pair<List<Pair<String, Double>>, Map<String, Int>> {
+                    val groups = ArrayList<Pair<String, Double>>(); val counts = HashMap<String, Int>()
+                    for ((cam, m) in list) {
+                        val k = key(cam.loc)
+                        val last = groups.lastOrNull()
+                        if (last != null && m - last.second <= 40.0 && (counts[last.first] ?: 1) > 0) counts[last.first] = (counts[last.first] ?: 1) + 1
+                        else { groups.add(k to m); counts[k] = 1 }
+                    }
+                    return groups to counts
+                }
+
+                val (fG, fC) = if (wantFlock) buildGroup(along.filter { it.first.isAlpr }) else (emptyList<Pair<String, Double>>() to emptyMap())
+                val (sG, sC) = if (wantSurv) buildGroup(along.filter { !it.first.isAlpr }) else (emptyList<Pair<String, Double>>() to emptyMap())
+                Quad(fG, fC, sG, sC)
             }
-            // Plate cameras within 40 m of each other along the line are one announcement, keyed
-            // by the first, as on a route.
-            val groups = ArrayList<Pair<String, Double>>(); val counts = HashMap<String, Int>()
-            for ((k, m) in flock) {
-                val last = groups.lastOrNull()
-                if (last != null && m - last.second <= 40.0 && (counts[last.first] ?: 1) > 0) counts[last.first] = (counts[last.first] ?: 1) + 1
-                else { groups.add(k to m); counts[k] = 1 }
-            }
-            driveCams = cams; driveFlock = groups; driveFlockCount = counts
+            driveCams = cams
+            driveFlock = flockGroups
+            driveFlockCount = flockCounts
+            driveSurv = survGroups
+            driveSurvCount = survCounts
             driveScanFrom = here; driveScanAtMs = android.os.SystemClock.elapsedRealtime()
-            if (cams.isNotEmpty() || groups.isNotEmpty()) android.util.Log.i("VelaSpeedCam", "driving mode: ${cams.size} camera(s), ${groups.size} plate group(s) within ${DRIVE_AHEAD_M.toInt()} m ahead")
+            if (cams.isNotEmpty() || flockGroups.isNotEmpty() || survGroups.isNotEmpty()) {
+                android.util.Log.i("VelaSpeedCam", "driving mode: ${cams.size} speed cam(s), ${flockGroups.size} plate group(s), ${survGroups.size} surv group(s)")
+            }
         }
     }
+
+    private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
     /** The point [meters] along [bearingDeg] from [from], flat-earth, good to a few meters at this range. */
     private fun aheadOf(from: app.vela.core.model.LatLng, bearingDeg: Double, meters: Double): app.vela.core.model.LatLng {
@@ -1434,7 +1495,8 @@ internal class NavController(
         driveScanJob?.cancel(); driveScanJob = null
         driveScanFrom = null; driveScanAtMs = 0L
         driveCams = emptyList(); driveFlock = emptyList(); driveFlockCount = emptyMap()
-        driveAnnouncedCams = emptySet(); driveAnnouncedFlock = emptySet()
+        driveSurv = emptyList(); driveSurvCount = emptyMap()
+        driveAnnouncedCams = emptySet(); driveAnnouncedFlock = emptySet(); driveAnnouncedSurv = emptySet()
     }
 
     /** Say so when you have been over the posted limit for a few seconds (issue #404, opt-in).

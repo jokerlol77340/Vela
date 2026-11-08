@@ -7866,7 +7866,9 @@ private fun ensureNavShieldLayer(style: Style) {
         PropertyFactory.textRotationAlignment(Property.TEXT_ROTATION_ALIGNMENT_VIEWPORT),
         PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_VIEWPORT),
         PropertyFactory.textPitchAlignment(Property.TEXT_PITCH_ALIGNMENT_VIEWPORT),
-        PropertyFactory.iconPadding(6f),
+        PropertyFactory.symbolSpacing(2500f),
+        PropertyFactory.iconPadding(50f),
+        PropertyFactory.textPadding(50f),
         PropertyFactory.iconOptional(false),
         PropertyFactory.textOptional(false),
     ).apply { minZoom = 11f }
@@ -9478,7 +9480,7 @@ private val ROAD_WIDTH_CAP_DP = mapOf(
 /** Street-name spacing along a line (Liberty leaves MapLibre's 250): at 250 most blocks of a town
  *  grid carried no name at street zoom while Google names every street; 140 names each block's street
  *  once or twice without repeating it down the screen (4a, 2026-10-03). */
-private const val ROAD_NAME_SPACING_PX = 140.0
+private const val ROAD_NAME_SPACING_PX = 450.0
 
 private fun expInterp(stops: FloatArray, z: Double, base: Double = 1.2): Double {
     if (z <= stops[0]) return stops[1].toDouble()
@@ -9533,14 +9535,14 @@ private fun roadNameSpacingExpr(base: Float): Expression {
         Expression.stop(19f, close + (far - close) * 0.2f), Expression.stop(20f, close + (far - close) * 0.55f), Expression.stop(21f, far),
     )
 }
-private const val ROAD_NAME_SPACING_MAX_PX = 1500.0
+private const val ROAD_NAME_SPACING_MAX_PX = 3000.0
 /** A low-ranked office or small practice past this rank in its ~400 m cell is not drawn. */
 private const val GENERIC_HIDE_RANK = 120.0
 /** From here the hidden ones draw as dots again (about the 30 ft scale), and from the second
  *  zoom every generic place in the block budget gets its pin and name. */
 private const val GENERIC_REVEAL_ZOOM = 19.5f
 private const val GENERIC_ICON_ZOOM = 20.3f
-private const val ROAD_NAME_SPACING_CLOSE_PX = 300.0
+private const val ROAD_NAME_SPACING_CLOSE_PX = 900.0
 
 private fun widenStreets(style: StyleLayers) {
     val scale = roadWidthScale()

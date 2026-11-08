@@ -73,6 +73,9 @@ internal object RoadShields {
             PropertyFactory.textSize(11f * sScale),
             PropertyFactory.textFont(arrayOf("Noto Sans Bold")),
             PropertyFactory.textHaloWidth(0f),
+            PropertyFactory.symbolSpacing(3000f),
+            PropertyFactory.iconPadding(80f),
+            PropertyFactory.textPadding(80f),
         )
         (style.getLayer("highway-shield-us-interstate") as? SymbolLayer)?.setProperties(
             *common,
@@ -133,6 +136,9 @@ internal object RoadShields {
             PropertyFactory.textSize(if (shieldScale <= 0f) 0.001f else 11f * shieldScale),
             PropertyFactory.iconOpacity(if (shieldScale <= 0f) 0f else 1f),
             PropertyFactory.textOpacity(if (shieldScale <= 0f) 0f else 1f),
+            PropertyFactory.symbolSpacing(3000f),
+            PropertyFactory.iconPadding(80f),
+            PropertyFactory.textPadding(80f),
         )
         (style.getLayer("highway-shield-us-interstate") as? SymbolLayer)?.setProperties(*shieldProps)
         (style.getLayer("road_shield_us") as? SymbolLayer)?.setProperties(*shieldProps)

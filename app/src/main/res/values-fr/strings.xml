@@ -1597,6 +1597,15 @@
     <string name="settings_nav_avoid_highways_hint">Éviter par défaut les autoroutes et voies rapides en voiture.</string>
     <string name="settings_nav_avoid_ferries_hint">Éviter par défaut les traversées en ferry.</string>
     <string name="settings_cameras_title">Caméras (Surveillance et plaques)</string>
+    <string name="settings_alpr_cams_title">Caméras lectrices de plaques (LAPI / ALPR)</string>
+    <string name="settings_surveillance_cams_title">Caméras de surveillance (CCTV)</string>
+    <string name="settings_surveillance_display">Afficher les caméras de surveillance sur la carte</string>
+    <string name="settings_surveillance_nav_card">Alerte visuelle surveillance</string>
+    <string name="settings_surveillance_nav_card_hint">En navigation, affiche un bandeau à l\'approche d\'une caméra de surveillance sur votre itinéraire. Désactivé par défaut.</string>
+    <string name="settings_surveillance_nav_voice">Annoncer les caméras de surveillance</string>
+    <string name="settings_surveillance_nav_voice_hint">En navigation, annonce vocalement « Caméra de surveillance à venir » à l\'approche. Désactivé par défaut.</string>
+    <string name="nav_surveillance_camera_ahead">Caméra de surveillance à venir</string>
+    <string name="nav_surveillance_cameras_ahead">Caméras de surveillance à venir</string>
     <string name="settings_flock_alpr_display">Caméras lectrices de plaques</string>
     <string name="settings_flock_alpr_hint">Affiche les caméras de lecture automatique de plaques (LAPI/ALPR/Flock).</string>
     <string name="settings_flock_surveillance_display">Caméras de surveillance</string>
