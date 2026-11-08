@@ -10282,15 +10282,22 @@ class MapViewModel @Inject constructor(
         val shown = if (st.navigating) listOfNotNull(st.activeRoute) else st.routes
         val routesKey = if (shown.isEmpty()) 0 else shown.fold(17) { h, r -> 31 * h + System.identityHashCode(r) }
         if (routesKey != flockRoutesKey) { flockRoutesKey = routesKey; flockCoveredBox = null; flockOnRoute = null; flockOnRouteJobKey = 0 }
+        val alprActive = app.vela.ui.Flock.showAlpr.value && app.vela.ui.MapPoiPrefs.flockScale.floatValue > 0f
+        val survActive = app.vela.ui.Flock.showSurveillance.value && app.vela.ui.MapPoiPrefs.surveillanceCamScale.floatValue > 0f
         fun camMinZ(v: Float): Double = when {
             v in 0.001f..0.05f -> 0.0
             v > 0.05f -> v.toDouble()
             else -> FLOCK_MIN_ZOOM
         }
-        val effectiveFlockMin = minOf(
-            camMinZ(app.vela.ui.MapPoiPrefs.flockMinZoom.floatValue),
-            camMinZ(app.vela.ui.MapPoiPrefs.surveillanceCamMinZoom.floatValue),
-        )
+        val effectiveFlockMin = when {
+            alprActive && survActive -> minOf(
+                camMinZ(app.vela.ui.MapPoiPrefs.flockMinZoom.floatValue),
+                camMinZ(app.vela.ui.MapPoiPrefs.surveillanceCamMinZoom.floatValue),
+            )
+            alprActive -> camMinZ(app.vela.ui.MapPoiPrefs.flockMinZoom.floatValue)
+            survActive -> camMinZ(app.vela.ui.MapPoiPrefs.surveillanceCamMinZoom.floatValue)
+            else -> FLOCK_MIN_ZOOM
+        }
         if (!app.vela.ui.Flock.on.value || (zoom < effectiveFlockMin && shown.isEmpty())) {
             flockJob?.cancel()
             if (flockOnRoute == null) flockOnRouteJobKey = 0

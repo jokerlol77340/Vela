@@ -339,6 +339,9 @@ private const val SPEEDCAM_LAYER = "vela-speedcam"
 private const val SPEEDCAM_IMG = "vela-speedcam-badge"
 private const val FLOCK_SRC = "vela-flock-src" // ALPR/Flock cameras (DeFlock/OSM) drawn at high zoom
 private const val FLOCK_LAYER = "vela-flock"
+private const val SURV_CAM_LAYER = "vela-surv-cam-layer"
+private const val SURV_CAM_CLUSTER_LAYER = "vela-surv-cam-cluster"
+private const val SURV_CAM_DIR_LAYER = "vela-surv-cam-dir"
 private const val SURV_CAM_IMG = "vela-surv-cam"
 private const val SURV_DIR_IMG = "vela-surv-cam-dir"
 private const val WAZE_POLICE_IMG = "vela-waze-police"
@@ -3030,62 +3033,79 @@ fun VelaMapView(
                 PropertyFactory.iconSize(savedPinSize(pinSc)),
                 PropertyFactory.iconOpacity(if (effSavedShow) 1f else 0f),
             )
-            val alprFactor = if (effFlockShow) sc * flockScale else 0.0001f
-            val survFactor = if (effSurvShow) sc * survCamScale else 0.0001f
-            val camScaleExpr = Expression.switchCase(
-                Expression.eq(Expression.get("isAlpr"), Expression.literal(true)),
-                Expression.literal(alprFactor),
-                Expression.literal(survFactor),
-            )
-            val cameraScaled = Expression.interpolate(
-                Expression.linear(), Expression.zoom(),
-                Expression.stop(11f, Expression.product(Expression.literal(0.55f), camScaleExpr)),
-                Expression.stop(14f, Expression.product(Expression.literal(0.7f), camScaleExpr)),
-                Expression.stop(17f, Expression.product(Expression.literal(1.0f), camScaleExpr)),
-                Expression.stop(19f, Expression.product(Expression.literal(1.35f), camScaleExpr)),
-            )
-            fun camTypeOpacity(show: Boolean, minZ: Float): Expression {
-                if (!show) return Expression.literal(0f)
-                if (minZ in 0.001f..0.05f) return Expression.literal(1f)
-                val z = if (minZ > 0.05f) minZ else 11f
-                return Expression.step(Expression.zoom(), Expression.literal(0f), Expression.stop(z, Expression.literal(1f)))
-            }
-            val camOpacityExpr = Expression.switchCase(
-                Expression.eq(Expression.get("isAlpr"), Expression.literal(true)),
-                camTypeOpacity(effFlockShow, flockMinZoom),
-                camTypeOpacity(effSurvShow, survCamMinZoom),
-            )
-            fun cMinZ(show: Boolean, z: Float): Float = when {
-                !show -> 11f
+            fun calcMinZ(z: Float): Float = when {
                 z in 0.001f..0.05f -> 0f
                 z > 0.05f -> z
                 else -> 11f
             }
-            val camsMinZ = minOf(
-                cMinZ(effFlockShow, flockMinZoom),
-                cMinZ(effSurvShow, survCamMinZoom),
+
+            // 1. ALPR CAMERAS (Lectrices de plaques)
+            val alprFactor = if (effFlockShow) sc * flockScale else 0.0001f
+            val alprScaled = Expression.interpolate(
+                Expression.linear(), Expression.zoom(),
+                Expression.stop(11f, 0.55f * alprFactor),
+                Expression.stop(14f, 0.7f * alprFactor),
+                Expression.stop(17f, 1.0f * alprFactor),
+                Expression.stop(19f, 1.35f * alprFactor),
             )
-            val detailMinZ = if (camsMinZ < 14f) 14f else camsMinZ
+            val flockZ = calcMinZ(flockMinZoom)
+            val flockDetailZ = if (flockZ < 14f) 14f else flockZ
+            val flockOp = if (effFlockShow) 1f else 0f
             st.getLayer(FLOCK_CLUSTER_LAYER)?.let { l ->
-                l.minZoom = camsMinZ
-                l.maxZoom = detailMinZ
+                l.minZoom = flockZ
+                l.maxZoom = flockDetailZ
                 l.setProperties(
-                    PropertyFactory.iconSize(cameraScaled),
-                    PropertyFactory.iconOpacity(camOpacityExpr),
+                    PropertyFactory.iconSize(alprScaled),
+                    PropertyFactory.iconOpacity(flockOp),
                 )
             }
             st.getLayer(FLOCK_LAYER)?.let { l ->
-                l.minZoom = detailMinZ
+                l.minZoom = flockDetailZ
                 l.setProperties(
-                    PropertyFactory.iconSize(cameraScaled),
-                    PropertyFactory.iconOpacity(camOpacityExpr),
+                    PropertyFactory.iconSize(alprScaled),
+                    PropertyFactory.iconOpacity(flockOp),
                 )
             }
             st.getLayer(FLOCK_DIR_LAYER)?.let { l ->
-                l.minZoom = detailMinZ
+                l.minZoom = flockDetailZ
                 l.setProperties(
-                    PropertyFactory.iconSize(cameraScaled),
-                    PropertyFactory.iconOpacity(camOpacityExpr),
+                    PropertyFactory.iconSize(alprScaled),
+                    PropertyFactory.iconOpacity(flockOp),
+                )
+            }
+
+            // 2. SURVEILLANCE CAMERAS (Caméras de surveillance)
+            val survFactor = if (effSurvShow) sc * survCamScale else 0.0001f
+            val survScaled = Expression.interpolate(
+                Expression.linear(), Expression.zoom(),
+                Expression.stop(11f, 0.55f * survFactor),
+                Expression.stop(14f, 0.7f * survFactor),
+                Expression.stop(17f, 1.0f * survFactor),
+                Expression.stop(19f, 1.35f * survFactor),
+            )
+            val survZ = calcMinZ(survCamMinZoom)
+            val survDetailZ = if (survZ < 14f) 14f else survZ
+            val survOp = if (effSurvShow) 1f else 0f
+            st.getLayer(SURV_CAM_CLUSTER_LAYER)?.let { l ->
+                l.minZoom = survZ
+                l.maxZoom = survDetailZ
+                l.setProperties(
+                    PropertyFactory.iconSize(survScaled),
+                    PropertyFactory.iconOpacity(survOp),
+                )
+            }
+            st.getLayer(SURV_CAM_LAYER)?.let { l ->
+                l.minZoom = survDetailZ
+                l.setProperties(
+                    PropertyFactory.iconSize(survScaled),
+                    PropertyFactory.iconOpacity(survOp),
+                )
+            }
+            st.getLayer(SURV_CAM_DIR_LAYER)?.let { l ->
+                l.minZoom = survDetailZ
+                l.setProperties(
+                    PropertyFactory.iconSize(survScaled),
+                    PropertyFactory.iconOpacity(survOp),
                 )
             }
             val speedcamSc = if (effSpeedcamShow) sc * speedcamScale else 0.0001f
@@ -6900,70 +6920,93 @@ PropertyFactory.iconPadding(2f),
         style.addSource(GeoJsonSource(FLOCK_SRC, GeoJsonOptions().withMaxZoom(16)))
         val flockScInit = app.vela.ui.MapPoiPrefs.flockScale.floatValue
         val survScInit = app.vela.ui.MapPoiPrefs.surveillanceCamScale.floatValue
-        val camScaleInit = Expression.switchCase(
-            Expression.eq(Expression.get("isAlpr"), Expression.literal(true)),
-            Expression.literal(if (flockScInit <= 0f) 0.0001f else flockScInit),
-            Expression.literal(if (survScInit <= 0f) 0.0001f else survScInit),
-        )
+
+        val flockFactorInit = if (flockScInit <= 0f) 0.0001f else flockScInit
         val flockSize = Expression.interpolate(
             Expression.linear(), Expression.zoom(),
-            Expression.stop(11f, Expression.product(Expression.literal(0.55f), camScaleInit)),
-            Expression.stop(14f, Expression.product(Expression.literal(0.7f), camScaleInit)),
-            Expression.stop(17f, Expression.product(Expression.literal(1.0f), camScaleInit)),
-            Expression.stop(19f, Expression.product(Expression.literal(1.35f), camScaleInit)),
+            Expression.stop(11f, 0.55f * flockFactorInit),
+            Expression.stop(14f, 0.7f * flockFactorInit),
+            Expression.stop(17f, 1.0f * flockFactorInit),
+            Expression.stop(19f, 1.35f * flockFactorInit),
         )
-        val camOpacityInit = Expression.switchCase(
-            Expression.eq(Expression.get("isAlpr"), Expression.literal(true)),
-            Expression.literal(if (flockScInit <= 0f) 0f else 1f),
-            Expression.literal(if (survScInit <= 0f) 0f else 1f),
+
+        val survFactorInit = if (survScInit <= 0f) 0.0001f else survScInit
+        val survSize = Expression.interpolate(
+            Expression.linear(), Expression.zoom(),
+            Expression.stop(11f, 0.55f * survFactorInit),
+            Expression.stop(14f, 0.7f * survFactorInit),
+            Expression.stop(17f, 1.0f * survFactorInit),
+            Expression.stop(19f, 1.35f * survFactorInit),
         )
-        val flockLayer =
-            SymbolLayer(FLOCK_LAYER, FLOCK_SRC).apply {
-                // One badge per install (the cone features in the same source are drawn by the
-                // cone layer below, so this one takes only the badge features); the clustered twin
-                // covers the zooms below street level.
-                setMinZoom(FLOCK_DETAIL_ZOOM)
-                setFilter(Expression.has(FLOCK_COUNT_PROP))
-                setProperties(
-                    PropertyFactory.iconImage(Expression.get("icon")),
-                    PropertyFactory.iconSize(flockSize),
-                    PropertyFactory.iconOpacity(camOpacityInit),
-                    PropertyFactory.iconOffset(
-                        Expression.switchCase(
-                            Expression.has(FLOCK_NUDGE_PROP), Expression.literal(arrayOf(11f, -11f)),
-                            Expression.literal(arrayOf(0f, 0f)),
-                        ),
+
+        val flockLayer = SymbolLayer(FLOCK_LAYER, FLOCK_SRC).apply {
+            setMinZoom(FLOCK_DETAIL_ZOOM)
+            setFilter(Expression.all(Expression.has(FLOCK_COUNT_PROP), Expression.eq(Expression.get("isAlpr"), Expression.literal(true))))
+            setProperties(
+                PropertyFactory.iconImage(Expression.get("icon")),
+                PropertyFactory.iconSize(flockSize),
+                PropertyFactory.iconOpacity(if (flockScInit <= 0f) 0f else 1f),
+                PropertyFactory.iconOffset(
+                    Expression.switchCase(
+                        Expression.has(FLOCK_NUDGE_PROP), Expression.literal(arrayOf(11f, -11f)),
+                        Expression.literal(arrayOf(0f, 0f)),
                     ),
-                    PropertyFactory.iconAllowOverlap(true), // never yields itself...
-                    PropertyFactory.iconIgnorePlacement(false), // ...and later symbols (street names) dodge it
-                    PropertyFactory.iconPadding(2f),
-                )
-            }
+                ),
+                PropertyFactory.iconAllowOverlap(true),
+                PropertyFactory.iconIgnorePlacement(false),
+                PropertyFactory.iconPadding(2f),
+            )
+        }
+
+        val survCamLayer = SymbolLayer(SURV_CAM_LAYER, FLOCK_SRC).apply {
+            setMinZoom(FLOCK_DETAIL_ZOOM)
+            setFilter(Expression.all(Expression.has(FLOCK_COUNT_PROP), Expression.eq(Expression.get("isAlpr"), Expression.literal(false))))
+            setProperties(
+                PropertyFactory.iconImage(Expression.get("icon")),
+                PropertyFactory.iconSize(survSize),
+                PropertyFactory.iconOpacity(if (survScInit <= 0f) 0f else 1f),
+                PropertyFactory.iconOffset(
+                    Expression.switchCase(
+                        Expression.has(FLOCK_NUDGE_PROP), Expression.literal(arrayOf(11f, -11f)),
+                        Expression.literal(arrayOf(0f, 0f)),
+                    ),
+                ),
+                PropertyFactory.iconAllowOverlap(true),
+                PropertyFactory.iconIgnorePlacement(false),
+                PropertyFactory.iconPadding(2f),
+            )
+        }
+
         val topBubble = topNavBubbleLayer(style)
         when {
-            // Above the nav street bubbles when they exist (user drive 2026-09-25: a bubble sat on
-            // a camera): the higher layer claims its space first and draws on top, so the bubble
-            // now steps aside for the camera instead of covering it.
-            topBubble != null -> style.addLayerAbove(flockLayer, topBubble)
-            style.getLayer(AMBIENT_LAYER) != null -> style.addLayerBelow(flockLayer, AMBIENT_LAYER)
-            style.getLayer(CONTROLS_CLAIM_LAYER) != null -> style.addLayerBelow(flockLayer, CONTROLS_CLAIM_LAYER)
-            else -> style.addLayer(flockLayer)
+            topBubble != null -> {
+                style.addLayerAbove(flockLayer, topBubble)
+                style.addLayerAbove(survCamLayer, topBubble)
+            }
+            style.getLayer(AMBIENT_LAYER) != null -> {
+                style.addLayerBelow(flockLayer, AMBIENT_LAYER)
+                style.addLayerBelow(survCamLayer, AMBIENT_LAYER)
+            }
+            style.getLayer(CONTROLS_CLAIM_LAYER) != null -> {
+                style.addLayerBelow(flockLayer, CONTROLS_CLAIM_LAYER)
+                style.addLayerBelow(survCamLayer, CONTROLS_CLAIM_LAYER)
+            }
+            else -> {
+                style.addLayer(flockLayer)
+                style.addLayer(survCamLayer)
+            }
         }
-        // The clustered twin: below street zoom a multi-head corner draws ONE badge at the
-        // cluster centroid (no count, no cones - zooming in reveals the detail). Its own source
-        // so the zoom handoff is pure renderer work, no re-uploads on zoom crossings.
-        // minZoom must match the VM's FLOCK_MIN_ZOOM fetch gate: clamped at 13.5 this layer sat
-        // on fetched cameras without drawing them (z13-13.5 was a dead band, and route-overview
-        // zoom showed nothing at all - the half-done state vela-dpad caught, issue #131).
+
         style.addSource(GeoJsonSource(FLOCK_CLUSTER_SRC, GeoJsonOptions().withMaxZoom(16)))
         style.addLayerBelow(
             SymbolLayer(FLOCK_CLUSTER_LAYER, FLOCK_CLUSTER_SRC).apply {
                 setMinZoom(11f)
                 setMaxZoom(FLOCK_DETAIL_ZOOM)
+                setFilter(Expression.eq(Expression.get("isAlpr"), Expression.literal(true)))
                 setProperties(
                     PropertyFactory.iconImage(Expression.get("icon")),
                     PropertyFactory.iconSize(flockSize),
-                    PropertyFactory.iconOpacity(camOpacityInit),
+                    PropertyFactory.iconOpacity(if (flockScInit <= 0f) 0f else 1f),
                     PropertyFactory.iconOffset(
                         Expression.switchCase(
                             Expression.has(FLOCK_NUDGE_PROP), Expression.literal(arrayOf(11f, -11f)),
@@ -6977,28 +7020,62 @@ PropertyFactory.iconPadding(2f),
             },
             FLOCK_LAYER,
         )
-        // Facing cone UNDER the badge (2026-07-21, user: Flock units are single-direction and
-        // DeFlock's own map shows facing) - only nodes with a dir tag get the FLOCK_DIR_PROP
-        // property, so untagged cameras keep the bare badge. Map-aligned rotation: the cone
-        // bitmap points NORTH and rotates by the tag's compass degrees; non-interactive
-        // (ignorePlacement true keeps it out of the collision index - it's a glow, not a symbol).
+        style.addLayerBelow(
+            SymbolLayer(SURV_CAM_CLUSTER_LAYER, FLOCK_CLUSTER_SRC).apply {
+                setMinZoom(11f)
+                setMaxZoom(FLOCK_DETAIL_ZOOM)
+                setFilter(Expression.eq(Expression.get("isAlpr"), Expression.literal(false)))
+                setProperties(
+                    PropertyFactory.iconImage(Expression.get("icon")),
+                    PropertyFactory.iconSize(survSize),
+                    PropertyFactory.iconOpacity(if (survScInit <= 0f) 0f else 1f),
+                    PropertyFactory.iconOffset(
+                        Expression.switchCase(
+                            Expression.has(FLOCK_NUDGE_PROP), Expression.literal(arrayOf(11f, -11f)),
+                            Expression.literal(arrayOf(0f, 0f)),
+                        ),
+                    ),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(false),
+                    PropertyFactory.iconPadding(2f),
+                )
+            },
+            SURV_CAM_LAYER,
+        )
+
         style.addLayerBelow(
             SymbolLayer(FLOCK_DIR_LAYER, FLOCK_SRC).apply {
                 setMinZoom(FLOCK_DETAIL_ZOOM)
-                setFilter(Expression.has(FLOCK_DIR_PROP))
+                setFilter(Expression.all(Expression.has(FLOCK_DIR_PROP), Expression.eq(Expression.get("isAlpr"), Expression.literal(true))))
                 setProperties(
                     PropertyFactory.iconImage(Expression.get("coneIcon")),
                     PropertyFactory.iconSize(flockSize),
-                    PropertyFactory.iconOpacity(camOpacityInit),
+                    PropertyFactory.iconOpacity(if (flockScInit <= 0f) 0f else 1f),
                     PropertyFactory.iconAllowOverlap(true),
                     PropertyFactory.iconIgnorePlacement(true),
                     PropertyFactory.iconRotate(Expression.get(FLOCK_DIR_PROP)),
                     PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
-                    // The cone fans out FROM the camera: anchor at its base (the badge point).
                     PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
                 )
             },
             FLOCK_LAYER,
+        )
+        style.addLayerBelow(
+            SymbolLayer(SURV_CAM_DIR_LAYER, FLOCK_SRC).apply {
+                setMinZoom(FLOCK_DETAIL_ZOOM)
+                setFilter(Expression.all(Expression.has(FLOCK_DIR_PROP), Expression.eq(Expression.get("isAlpr"), Expression.literal(false))))
+                setProperties(
+                    PropertyFactory.iconImage(Expression.get("coneIcon")),
+                    PropertyFactory.iconSize(survSize),
+                    PropertyFactory.iconOpacity(if (survScInit <= 0f) 0f else 1f),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
+                    PropertyFactory.iconRotate(Expression.get(FLOCK_DIR_PROP)),
+                    PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
+                    PropertyFactory.iconAnchor(Property.ICON_ANCHOR_BOTTOM),
+                )
+            },
+            SURV_CAM_LAYER,
         )
     }
     // Live Waze community route alerts
@@ -7240,7 +7317,7 @@ private fun ensureTopography(style: Style, on: Boolean) {
  *  labels so they stay on top; keyless public tiles, removed cleanly when off. */
 private const val NAV_ROADLABEL_LAYER = "vela-nav-roadlabels"
 /** Camera badges the nav street bubbles must never cover (see topNavBubbleLayer). */
-private val CAMERA_BADGE_LAYERS = setOf(FLOCK_LAYER, FLOCK_CLUSTER_LAYER, SPEEDCAM_LAYER)
+private val CAMERA_BADGE_LAYERS = setOf(FLOCK_LAYER, FLOCK_CLUSTER_LAYER, SURV_CAM_LAYER, SURV_CAM_CLUSTER_LAYER, SPEEDCAM_LAYER)
 
 /** The highest nav street-bubble layer on the map, or null; camera badges are added above it. */
 private fun topNavBubbleLayer(style: Style): String? =
@@ -11028,14 +11105,23 @@ private fun applyData(
         z > 0.05f -> z
         else -> 11f
     }
-    val camsClusterMinZ = minOf(cMinZ(flockMinZ), cMinZ(survMinZ))
-    val camsDetailMinZ = if (camsClusterMinZ < 14f) 14f else camsClusterMinZ
+    val alprMinZ = cMinZ(flockMinZ)
+    val alprDetailZ = if (alprMinZ < 14f) 14f else alprMinZ
     style.getLayer(FLOCK_CLUSTER_LAYER)?.let {
-        it.minZoom = camsClusterMinZ
-        it.maxZoom = camsDetailMinZ
+        it.minZoom = alprMinZ
+        it.maxZoom = alprDetailZ
     }
-    style.getLayer(FLOCK_LAYER)?.minZoom = camsDetailMinZ
-    style.getLayer(FLOCK_DIR_LAYER)?.minZoom = camsDetailMinZ
+    style.getLayer(FLOCK_LAYER)?.minZoom = alprDetailZ
+    style.getLayer(FLOCK_DIR_LAYER)?.minZoom = alprDetailZ
+
+    val survCamMinZ = cMinZ(survMinZ)
+    val survCamDetailZ = if (survCamMinZ < 14f) 14f else survCamMinZ
+    style.getLayer(SURV_CAM_CLUSTER_LAYER)?.let {
+        it.minZoom = survCamMinZ
+        it.maxZoom = survCamDetailZ
+    }
+    style.getLayer(SURV_CAM_LAYER)?.minZoom = survCamDetailZ
+    style.getLayer(SURV_CAM_DIR_LAYER)?.minZoom = survCamDetailZ
 
     // ALPR/Flock cameras → icon features (identity-gated like the controls). Empty when the layer's
     // off or zoomed out, which clears the source. Two uploads per change, both built from the same
