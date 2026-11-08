@@ -1735,7 +1735,18 @@ fun VelaMapView(
         // scale bar reads about 50 ft, Google's level. The fetch stays at 16, so they are already
         // loaded when the zoom reaches them.
         runCatching {
-            val minZ = if (navMode) 15.4f else CONTROLS_BROWSE_SHOW_ZOOM
+            val ctrlMinPrefs = listOf(
+                app.vela.ui.MapPoiPrefs.signalMinZoom.floatValue,
+                app.vela.ui.MapPoiPrefs.stopSignMinZoom.floatValue,
+                app.vela.ui.MapPoiPrefs.railCrossingMinZoom.floatValue,
+                app.vela.ui.MapPoiPrefs.speedHumpMinZoom.floatValue,
+            )
+            val minZ = when {
+                ctrlMinPrefs.any { it in 0.001f..0.05f } -> 0f
+                ctrlMinPrefs.any { it > 0.05f } -> ctrlMinPrefs.filter { it > 0.05f }.minOrNull()!!
+                navMode -> 15.4f
+                else -> CONTROLS_BROWSE_SHOW_ZOOM
+            }
             (style.getLayer(CONTROLS_LAYER))?.minZoom = minZ
             (style.getLayer(CONTROLS_CLAIM_LAYER))?.minZoom = minZ
         }
@@ -1744,7 +1755,15 @@ fun VelaMapView(
         // exit. The per-viewport stop FETCH is also skipped while navigating (MapViewModel).
         runCatching {
             val transitVis = if (if (navMode) app.vela.ui.MapPoiPrefs.transitStopShowInNav.value else app.vela.ui.MapPoiPrefs.transitStopShowInMap.value) Property.VISIBLE else Property.NONE
-            style.getLayer(TRANSIT_STOPS_LAYER)?.setProperties(PropertyFactory.visibility(transitVis))
+            val trMinZ = when {
+                app.vela.ui.MapPoiPrefs.transitStopMinZoom.floatValue in 0.001f..0.05f -> 0f
+                app.vela.ui.MapPoiPrefs.transitStopMinZoom.floatValue > 0.05f -> app.vela.ui.MapPoiPrefs.transitStopMinZoom.floatValue
+                else -> 15f
+            }
+            style.getLayer(TRANSIT_STOPS_LAYER)?.let {
+                it.minZoom = trMinZ
+                it.setProperties(PropertyFactory.visibility(transitVis))
+            }
         }
         // CAR-MODE strip (drive nav only, 2026-07-16 - the battery report): basemap highway
         // shields (a wall of badges including the other carriageway's; the banner's chips carry
@@ -2937,12 +2956,30 @@ fun VelaMapView(
                 Expression.stop(arrayOf("museum", "art_gallery", "cinema", "theatre", "attraction", "gallery", "information", "artwork", "viewpoint", "aquarium", "zoo"), groupOp(effCultureShow, cultureMinZoom)),
                 Expression.stop(arrayOf("stadium", "sports", "sports_centre", "fitness_centre", "swimming_pool"), groupOp(effSportShow, sportMinZoom)),
             )
-            listOf("poi_r1", "poi_r7", "poi_r20").forEach { id ->
-                st.getLayer(id)?.setProperties(
+            val allPoiMinZList = listOf(
+                foodMinZoom, shopMinZoom, sportMinZoom, eduMinZoom, healthMinZoom, lodgingMinZoom,
+                cultureMinZoom, civicMinZoom, parkMinZoom, fuelStationMinZoom, parkingMinZoom, poiPlaceMinZoom
+            )
+            val anyPoiZ0 = allPoiMinZList.any { it in 0.001f..0.05f }
+            val lowestPoiZ = allPoiMinZList.filter { it > 0.05f }.minOrNull()
+            val targetPoiMinZoom = when {
+                anyPoiZ0 -> 0f
+                lowestPoiZ != null -> minOf(lowestPoiZ, 14f)
+                else -> 14f
+            }
+            listOf("poi_r1", "poi_r7", "poi_r20", "poi_transit").forEach { id ->
+                val l = st.getLayer(id) as? SymbolLayer ?: return@forEach
+                l.minZoom = targetPoiMinZoom
+                l.setProperties(
                     PropertyFactory.iconSize(osmPoiSize),
                     PropertyFactory.iconOpacity(osmPoiOpacity),
                     PropertyFactory.textOpacity(osmPoiOpacity),
                 )
+            }
+            st.getLayer(AMBIENT_LAYER)?.minZoom = targetPoiMinZoom
+            st.getLayer(AMBIENT_DOT_LAYER)?.minZoom = targetPoiMinZoom
+            st.layers.filter { it.id.startsWith("vela-places-") }.forEach {
+                it.minZoom = targetPoiMinZoom
             }
             val trSc = sc * (if (effTransitShow) transitStopScale else 0.0001f)
             st.getLayer(TRANSIT_STOPS_LAYER)?.let { l ->
@@ -6953,7 +6990,7 @@ PropertyFactory.iconPadding(2f),
                     ),
                 ),
                 PropertyFactory.iconAllowOverlap(true),
-                PropertyFactory.iconIgnorePlacement(false),
+                PropertyFactory.iconIgnorePlacement(true),
                 PropertyFactory.iconPadding(2f),
             )
         }
@@ -6972,7 +7009,7 @@ PropertyFactory.iconPadding(2f),
                     ),
                 ),
                 PropertyFactory.iconAllowOverlap(true),
-                PropertyFactory.iconIgnorePlacement(false),
+                PropertyFactory.iconIgnorePlacement(true),
                 PropertyFactory.iconPadding(2f),
             )
         }
@@ -7014,7 +7051,7 @@ PropertyFactory.iconPadding(2f),
                         ),
                     ),
                     PropertyFactory.iconAllowOverlap(true),
-                    PropertyFactory.iconIgnorePlacement(false),
+                    PropertyFactory.iconIgnorePlacement(true),
                     PropertyFactory.iconPadding(2f),
                 )
             },
@@ -7036,7 +7073,7 @@ PropertyFactory.iconPadding(2f),
                         ),
                     ),
                     PropertyFactory.iconAllowOverlap(true),
-                    PropertyFactory.iconIgnorePlacement(false),
+                    PropertyFactory.iconIgnorePlacement(true),
                     PropertyFactory.iconPadding(2f),
                 )
             },
@@ -7097,7 +7134,7 @@ PropertyFactory.iconPadding(2f),
                 PropertyFactory.iconSize(wazeSize),
                 PropertyFactory.iconOpacity(if (wazeScInit <= 0f) 0f else 1f),
                 PropertyFactory.iconAllowOverlap(true),
-                PropertyFactory.iconIgnorePlacement(false),
+                PropertyFactory.iconIgnorePlacement(true),
                 PropertyFactory.iconPadding(2f),
             )
         }
@@ -7127,7 +7164,7 @@ PropertyFactory.iconPadding(2f),
                 PropertyFactory.iconImage(SPEEDCAM_IMG),
                 PropertyFactory.iconSize(camSize),
                 PropertyFactory.iconAllowOverlap(true),
-                PropertyFactory.iconIgnorePlacement(false),
+                PropertyFactory.iconIgnorePlacement(true),
                 PropertyFactory.iconPadding(2f),
             )
         }
@@ -11054,6 +11091,58 @@ private fun applyData(
             style.getLayer(id)?.setProperties(PropertyFactory.visibility(controlsVis))
         }
         lastControlsVis = controlsVis
+    }
+    val ctrlMinPrefs = listOf(
+        app.vela.ui.MapPoiPrefs.signalMinZoom.floatValue,
+        app.vela.ui.MapPoiPrefs.stopSignMinZoom.floatValue,
+        app.vela.ui.MapPoiPrefs.railCrossingMinZoom.floatValue,
+        app.vela.ui.MapPoiPrefs.speedHumpMinZoom.floatValue,
+    )
+    val controlsMinZ = when {
+        ctrlMinPrefs.any { it in 0.001f..0.05f } -> 0f
+        ctrlMinPrefs.any { it > 0.05f } -> ctrlMinPrefs.filter { it > 0.05f }.minOrNull()!!
+        navMode -> 15.4f
+        else -> CONTROLS_BROWSE_SHOW_ZOOM
+    }
+    listOf(CONTROLS_LAYER, CONTROLS_CLAIM_LAYER).forEach { id ->
+        style.getLayer(id)?.minZoom = controlsMinZ
+    }
+
+    val trMinZ = when {
+        app.vela.ui.MapPoiPrefs.transitStopMinZoom.floatValue in 0.001f..0.05f -> 0f
+        app.vela.ui.MapPoiPrefs.transitStopMinZoom.floatValue > 0.05f -> app.vela.ui.MapPoiPrefs.transitStopMinZoom.floatValue
+        else -> 15f
+    }
+    style.getLayer(TRANSIT_STOPS_LAYER)?.minZoom = trMinZ
+
+    val allPoiMinZList = listOf(
+        app.vela.ui.MapPoiPrefs.foodMinZoom.floatValue,
+        app.vela.ui.MapPoiPrefs.shopMinZoom.floatValue,
+        app.vela.ui.MapPoiPrefs.sportMinZoom.floatValue,
+        app.vela.ui.MapPoiPrefs.eduMinZoom.floatValue,
+        app.vela.ui.MapPoiPrefs.healthMinZoom.floatValue,
+        app.vela.ui.MapPoiPrefs.lodgingMinZoom.floatValue,
+        app.vela.ui.MapPoiPrefs.cultureMinZoom.floatValue,
+        app.vela.ui.MapPoiPrefs.civicMinZoom.floatValue,
+        app.vela.ui.MapPoiPrefs.parkMinZoom.floatValue,
+        app.vela.ui.MapPoiPrefs.fuelStationMinZoom.floatValue,
+        app.vela.ui.MapPoiPrefs.parkingMinZoom.floatValue,
+        app.vela.ui.MapPoiPrefs.poiPlaceMinZoom.floatValue,
+    )
+    val anyPoiZ0 = allPoiMinZList.any { it in 0.001f..0.05f }
+    val lowestPoiZ = allPoiMinZList.filter { it > 0.05f }.minOrNull()
+    val targetPoiMinZoom = when {
+        anyPoiZ0 -> 0f
+        lowestPoiZ != null -> minOf(lowestPoiZ, 14f)
+        else -> 14f
+    }
+    listOf("poi_r1", "poi_r7", "poi_r20", "poi_transit").forEach { id ->
+        style.getLayer(id)?.minZoom = targetPoiMinZoom
+    }
+    style.getLayer(AMBIENT_LAYER)?.minZoom = targetPoiMinZoom
+    style.getLayer(AMBIENT_DOT_LAYER)?.minZoom = targetPoiMinZoom
+    style.layers.filter { it.id.startsWith("vela-places-") }.forEach {
+        it.minZoom = targetPoiMinZoom
     }
 
     // Traffic controls (lights + stop signs) → icon features. Identity-gated like markers/ambient so a

@@ -8782,8 +8782,29 @@ class MapViewModel @Inject constructor(
         if (s.navigating || s.replaying || s.results.isNotEmpty() || s.selected != null ||
             s.streetView != null || s.streetViewLoading
         ) return
-        // Zoomed out past neighborhood level → drop the dots (and let the OSM POIs come back).
-        if (zoom < 14.0) {
+        // Zoomed out past neighborhood level → drop the dots (and let the OSM POIs come back),
+        // unless any POI category has a lower or z0 min-zoom preference configured.
+        val allPoiMinZooms = listOf(
+            app.vela.ui.MapPoiPrefs.foodMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.shopMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.sportMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.eduMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.healthMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.lodgingMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.cultureMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.civicMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.parkMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.fuelStationMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.parkingMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.poiPlaceMinZoom.floatValue,
+        )
+        val hasZ0Poi = allPoiMinZooms.any { it in 0.001f..0.05f }
+        val effectiveAmbientMin = when {
+            hasZ0Poi -> 0.0
+            allPoiMinZooms.any { it > 0.05f } -> minOf(14.0, allPoiMinZooms.filter { it > 0.05f }.minOrNull()!!.toDouble())
+            else -> 14.0
+        }
+        if (zoom < effectiveAmbientMin) {
             ambientJob?.cancel()
             lastAmbientCenter = null
             app.vela.ui.map.AmbientStability.reset()
@@ -9757,6 +9778,8 @@ class MapViewModel @Inject constructor(
     private var navTapDetourJob: Job? = null
     private var controlsBox: DoubleArray? = null // [s,w,n,e] of the last fetched (padded) box
     private var flockBox: DoubleArray? = null
+    private var flockLoadedPool: List<app.vela.core.data.AlprCamera> = emptyList()
+    private var flockCoveredBox: DoubleArray? = null
     private var flockRoutesKey = 0 // which routes the camera layer was last filtered to (0 = none)
     private var flockOnRoute: List<app.vela.core.data.AlprCamera>? = null // the cameras on those routes, once worked out
     private var flockOnRouteJobKey = 0 // the route set that work was started for
@@ -9782,7 +9805,19 @@ class MapViewModel @Inject constructor(
         // the clear branch below would blank the corridor set at highway speed). A FAILED corridor
         // fetch leaves the key unset and this path keeps running as the fallback.
         if (_state.value.navigating && nav.corridorControlsActive) return
-        if (zoom < CONTROLS_MIN_ZOOM) {
+        val ctrlMinPrefs = listOf(
+            app.vela.ui.MapPoiPrefs.signalMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.stopSignMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.railCrossingMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.speedHumpMinZoom.floatValue,
+        )
+        val hasZ0Controls = ctrlMinPrefs.any { it in 0.001f..0.05f }
+        val effectiveControlsMin = when {
+            hasZ0Controls -> 0.0
+            ctrlMinPrefs.any { it > 0.05f } -> ctrlMinPrefs.filter { it > 0.05f }.minOrNull()?.toDouble() ?: CONTROLS_MIN_ZOOM
+            else -> CONTROLS_MIN_ZOOM
+        }
+        if (zoom < effectiveControlsMin) {
             controlsBox = null
             controlsJob?.cancel()
             if (_state.value.trafficControls.isNotEmpty()) _state.update { it.copy(trafficControls = emptyList()) }
@@ -9874,17 +9909,23 @@ class MapViewModel @Inject constructor(
     /** Re-fetch (or clear) the Flock layer for the current viewport - called when the toggle flips,
      *  so turning it on shows cameras without needing a pan first. */
     fun refreshFlockNow() {
-        flockBox = null
+        if (flockLoadedPool.isNotEmpty()) {
+            _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(flockLoadedPool)) }
+        }
         lastFlockViewport?.let { refreshFlock(it[0], it[1], it[2], it[3], it[4]) }
     }
 
     private var speedCamBox: DoubleArray? = null
+    private var speedCamLoadedPool: List<app.vela.core.data.SpeedCamera> = emptyList()
+    private var speedCamCoveredBox: DoubleArray? = null
     private var speedCamJob: Job? = null
     private var speedCamRoutesKey = 0
 
     /** Re-fetch (or clear) the speed-camera layer when its toggle flips - Flock's twin. */
     fun refreshSpeedCamsNow() {
-        speedCamBox = null
+        if (speedCamLoadedPool.isNotEmpty() && app.vela.ui.SpeedCams.on.value) {
+            _state.update { it.copy(speedCameras = speedCamLoadedPool) }
+        }
         lastFlockViewport?.let { refreshSpeedCams(it[0], it[1], it[2], it[3], it[4]) }
     }
 
@@ -9897,7 +9938,7 @@ class MapViewModel @Inject constructor(
         val routesKey = if (shown.isEmpty()) 0 else shown.fold(17) { h, r -> 31 * h + System.identityHashCode(r) }
         if (routesKey != speedCamRoutesKey) {
             speedCamRoutesKey = routesKey
-            speedCamBox = null
+            speedCamCoveredBox = null
         }
         val scPref = app.vela.ui.MapPoiPrefs.speedcamMinZoom.floatValue
         val effectiveSpeedMin = when {
@@ -9906,23 +9947,22 @@ class MapViewModel @Inject constructor(
             else -> FLOCK_MIN_ZOOM
         }
         if (!app.vela.ui.SpeedCams.on.value || (zoom < effectiveSpeedMin && shown.isEmpty())) {
-            speedCamBox = null
             speedCamJob?.cancel()
             if (_state.value.speedCameras.isNotEmpty()) _state.update { it.copy(speedCameras = emptyList()) }
             return
         }
-        val cLat = (south + north) / 2; val cLng = (west + east) / 2
-        speedCamBox?.let { b ->
-            val insLat = (b[2] - b[0]) * 0.25; val insLng = (b[3] - b[1]) * 0.25
-            if (cLat in (b[0] + insLat)..(b[2] - insLat) && cLng in (b[1] + insLng)..(b[3] - insLng)) return
+        val cov = speedCamCoveredBox
+        if (cov != null && south >= cov[0] && west >= cov[1] && north <= cov[2] && east <= cov[3]) {
+            if (_state.value.speedCameras.isEmpty() && speedCamLoadedPool.isNotEmpty()) {
+                _state.update { it.copy(speedCameras = speedCamLoadedPool) }
+            }
+            return
         }
         speedCamJob?.cancel()
         speedCamJob = viewModelScope.launch {
             app.vela.data.BundledSpeedCameras.ensureLoaded(appContext)
-            val padLat = (north - south) * 0.4; val padLng = (east - west) * 0.4
+            val padLat = (north - south) * 0.75; val padLng = (east - west) * 0.75
             val s = south - padLat; val n = north + padLat; val w = west - padLng; val e = east + padLng
-            speedCamBox = doubleArrayOf(s, w, n, e)
-
             val instantRoute = if (shown.isNotEmpty()) {
                 withContext(Dispatchers.Default) {
                     app.vela.data.BundledSpeedCameras.mergeAndDedupe(
@@ -9934,18 +9974,15 @@ class MapViewModel @Inject constructor(
                 withContext(Dispatchers.Default) { app.vela.data.BundledSpeedCameras.inBox(s, w, n, e) }
             } else emptyList()
             val initial = withContext(Dispatchers.Default) {
-                app.vela.data.BundledSpeedCameras.mergeAndDedupe(instantRoute, instantBox)
+                app.vela.data.BundledSpeedCameras.mergeAndDedupe(speedCamLoadedPool, instantRoute, instantBox)
             }
-            val keptInitial = if (initial.size <= SPEEDCAM_ONSCREEN_CAP) initial else {
-                val cosLat = kotlin.math.cos(Math.toRadians(cLat))
-                initial.sortedBy {
-                    val dy = it.loc.lat - cLat
-                    val dx = (it.loc.lng - cLng) * cosLat
-                    dy * dy + dx * dx
-                }.take(SPEEDCAM_ONSCREEN_CAP)
-            }
-            if (keptInitial.isNotEmpty() || _state.value.speedCameras.isNotEmpty()) {
-                _state.update { it.copy(speedCameras = keptInitial) }
+            speedCamLoadedPool = initial
+            val curB = speedCamCoveredBox
+            speedCamCoveredBox = if (curB == null) doubleArrayOf(s, w, n, e) else doubleArrayOf(
+                minOf(curB[0], s), minOf(curB[1], w), maxOf(curB[2], n), maxOf(curB[3], e)
+            )
+            if (initial.isNotEmpty()) {
+                _state.update { it.copy(speedCameras = initial) }
             }
             delay(250)
             val bakedRoute = if (shown.isNotEmpty()) {
@@ -9977,21 +10014,14 @@ class MapViewModel @Inject constructor(
                 val merged = withContext(Dispatchers.Default) {
                     app.vela.data.BundledSpeedCameras.mergeAndDedupe(initial, bakedRoute, bakedBox, liveBox, liveRoute)
                 }
-                val keptMerged = if (merged.size <= SPEEDCAM_ONSCREEN_CAP) merged else {
-                    val cosLat = kotlin.math.cos(Math.toRadians(cLat))
-                    merged.sortedBy {
-                        val dy = it.loc.lat - cLat
-                        val dx = (it.loc.lng - cLng) * cosLat
-                        dy * dy + dx * dx
-                    }.take(SPEEDCAM_ONSCREEN_CAP)
-                }
+                speedCamLoadedPool = merged
                 if (bakedBox.isNotEmpty() || liveBox.isNotEmpty()) {
                     viewModelScope.launch(Dispatchers.IO) {
                         runCatching { app.vela.data.BundledSpeedCameras.rememberNewCameras(appContext, merged) }
                     }
                 }
-                diag.record("speedcam", "showing ${keptMerged.size} camera(s) at z${"%.1f".format(zoom)}", "multi-source")
-                _state.update { it.copy(speedCameras = keptMerged) }
+                diag.record("speedcam", "showing ${merged.size} camera(s) at z${"%.1f".format(zoom)}", "multi-source")
+                _state.update { it.copy(speedCameras = merged) }
             }
         }
     }
@@ -10216,7 +10246,13 @@ class MapViewModel @Inject constructor(
         // whole drive would otherwise fire at nav zoom.
         if (_state.value.navigating) return
         // Transit-stop toggle (user 2026-07-15): treat "off" like zoomed-out - clear + skip.
-        if (!app.vela.ui.MapPoiPrefs.showTransit.value || zoom < TRANSIT_STOPS_MIN_ZOOM) {
+        val trPref = app.vela.ui.MapPoiPrefs.transitStopMinZoom.floatValue
+        val effectiveTransitMin = when {
+            trPref in 0.001f..0.05f -> 0.0
+            trPref > 0.05f -> trPref.toDouble()
+            else -> TRANSIT_STOPS_MIN_ZOOM
+        }
+        if (!app.vela.ui.MapPoiPrefs.showTransit.value || zoom < effectiveTransitMin) {
             transitStopsBox = null
             transitStopsJob?.cancel()
             if (_state.value.transitStops.isNotEmpty()) _state.update { it.copy(transitStops = emptyList()) }
@@ -10306,7 +10342,7 @@ class MapViewModel @Inject constructor(
         val st = _state.value
         val shown = if (st.navigating) listOfNotNull(st.activeRoute) else st.routes
         val routesKey = if (shown.isEmpty()) 0 else shown.fold(17) { h, r -> 31 * h + System.identityHashCode(r) }
-        if (routesKey != flockRoutesKey) { flockRoutesKey = routesKey; flockBox = null; flockOnRoute = null; flockOnRouteJobKey = 0 }
+        if (routesKey != flockRoutesKey) { flockRoutesKey = routesKey; flockCoveredBox = null; flockOnRoute = null; flockOnRouteJobKey = 0 }
         val alprActive = app.vela.ui.Flock.showAlpr.value && app.vela.ui.MapPoiPrefs.flockScale.floatValue > 0f
         val survActive = app.vela.ui.Flock.showSurveillance.value && app.vela.ui.MapPoiPrefs.surveillanceCamScale.floatValue > 0f
         fun camMinZ(v: Float): Double = when {
@@ -10324,24 +10360,23 @@ class MapViewModel @Inject constructor(
             else -> FLOCK_MIN_ZOOM
         }
         if (!app.vela.ui.Flock.on.value || (zoom < effectiveFlockMin && shown.isEmpty())) {
-            flockBox = null
             flockJob?.cancel()
             if (flockOnRoute == null) flockOnRouteJobKey = 0
             if (_state.value.flockCameras.isNotEmpty()) _state.update { it.copy(flockCameras = emptyList()) }
             return
         }
-        val cLat = (south + north) / 2; val cLng = (west + east) / 2
-        flockBox?.let { b ->
-            val insLat = (b[2] - b[0]) * 0.25; val insLng = (b[3] - b[1]) * 0.25
-            if (cLat in (b[0] + insLat)..(b[2] - insLat) && cLng in (b[1] + insLng)..(b[3] - insLng)) return
+        val cov = flockCoveredBox
+        if (cov != null && south >= cov[0] && west >= cov[1] && north <= cov[2] && east <= cov[3]) {
+            if (_state.value.flockCameras.isEmpty() && flockLoadedPool.isNotEmpty()) {
+                _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(flockLoadedPool)) }
+            }
+            return
         }
+        val padLat = (north - south) * 0.75; val padLng = (east - west) * 0.75
+        val s = south - padLat; val n = north + padLat; val w = west - padLng; val e = east + padLng
         flockJob?.cancel()
         flockJob = viewModelScope.launch {
             app.vela.data.FlockCameras.ensureLoaded(appContext)
-            val padLat = (north - south) * 0.4; val padLng = (east - west) * 0.4
-            val s = south - padLat; val n = north + padLat; val w = west - padLng; val e = east + padLng
-            flockBox = doubleArrayOf(s, w, n, e)
-
             val bundledBox = if (zoom >= effectiveFlockMin) {
                 withContext(Dispatchers.Default) { app.vela.data.FlockCameras.inBox(s, w, n, e) }
             } else emptyList()
@@ -10351,18 +10386,15 @@ class MapViewModel @Inject constructor(
                 }
             } else emptyList()
             val initial = withContext(Dispatchers.Default) {
-                app.vela.data.FlockCameras.mergeAndDedupe(bundledRoute, bundledBox, flockOnRoute.orEmpty())
+                app.vela.data.FlockCameras.mergeAndDedupe(flockLoadedPool, bundledRoute, bundledBox, flockOnRoute.orEmpty())
             }
-            val keptInitial = if (initial.size <= FLOCK_ONSCREEN_CAP) initial else {
-                val cosLat = kotlin.math.cos(Math.toRadians(cLat))
-                initial.sortedBy {
-                    val dy = it.loc.lat - cLat
-                    val dx = (it.loc.lng - cLng) * cosLat
-                    dy * dy + dx * dx
-                }.take(FLOCK_ONSCREEN_CAP)
-            }
-            if (keptInitial.isNotEmpty() || _state.value.flockCameras.isNotEmpty()) {
-                _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(keptInitial)) }
+            flockLoadedPool = initial
+            val curB = flockCoveredBox
+            flockCoveredBox = if (curB == null) doubleArrayOf(s, w, n, e) else doubleArrayOf(
+                minOf(curB[0], s), minOf(curB[1], w), maxOf(curB[2], n), maxOf(curB[3], e)
+            )
+            if (initial.isNotEmpty()) {
+                _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(initial)) }
             }
             delay(250)
             val liveBox = if (zoom >= effectiveFlockMin && (east - west) <= 2.2 && (north - south) <= 2.2) {
@@ -10370,24 +10402,17 @@ class MapViewModel @Inject constructor(
                     runCatching { app.vela.core.data.OverpassAlprCameras.fetchInBox(http, s, w, n, e) }.getOrNull()
                 }
             } else emptyList()
+            val merged = withContext(Dispatchers.Default) {
+                app.vela.data.FlockCameras.mergeAndDedupe(flockLoadedPool, liveBox.orEmpty())
+            }
+            flockLoadedPool = merged
             if (!liveBox.isNullOrEmpty()) {
-                val merged = withContext(Dispatchers.Default) {
-                    app.vela.data.FlockCameras.mergeAndDedupe(initial, liveBox)
-                }
-                val keptMerged = if (merged.size <= FLOCK_ONSCREEN_CAP) merged else {
-                    val cosLat = kotlin.math.cos(Math.toRadians(cLat))
-                    merged.sortedBy {
-                        val dy = it.loc.lat - cLat
-                        val dx = (it.loc.lng - cLng) * cosLat
-                        dy * dy + dx * dx
-                    }.take(FLOCK_ONSCREEN_CAP)
-                }
                 viewModelScope.launch(Dispatchers.IO) {
                     runCatching { app.vela.data.FlockCameras.rememberNewCameras(appContext, liveBox) }
                 }
-                diag.record("flock", "showing ${keptMerged.size} camera(s) at z${"%.1f".format(zoom)}", "multi-source")
-                _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(keptMerged)) }
             }
+            diag.record("flock", "showing ${merged.size} camera(s) at z${"%.1f".format(zoom)}", "multi-source")
+            _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(merged)) }
 
             if (shown.isNotEmpty() && flockOnRoute == null && flockOnRouteJobKey != routesKey) {
                 flockOnRouteJobKey = routesKey
