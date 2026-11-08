@@ -98,11 +98,11 @@ object FlockCameras {
         val survStream = runCatching { context.assets.open(BUNDLED_SURV) }.getOrNull()
         val liveSurv = liveSurvBin(context).takeIf { it.exists() }?.let { runCatching { it.inputStream() }.getOrNull() }
 
-        val las = ArrayList<Double>(220_000)
-        val los = ArrayList<Double>(220_000)
-        val ops = ArrayList<String>(220_000)
-        val dirs = ArrayList<Float>(220_000)
-        val alprs = ArrayList<Boolean>(220_000)
+        val las = ArrayList<Double>(280_000)
+        val los = ArrayList<Double>(280_000)
+        val ops = ArrayList<String>(280_000)
+        val dirs = ArrayList<Float>(280_000)
+        val alprs = ArrayList<Boolean>(280_000)
         val intern = HashMap<String, String>()
 
         // 1. Load ALPR cameras
@@ -111,18 +111,54 @@ object FlockCameras {
                 parseInto(alprStream, true, las, los, ops, dirs, alprs, intern)
             }
         }
+        val alprCount = las.size
 
-        // 2. Load bundled surveillance cameras (France + Paris intra-muros)
+        // Build spatial index of ALPR points to strictly avoid any duplicate with surveillance cameras
+        val alprSpatial = HashMap<Long, MutableList<Int>>()
+        val cellDeg = 0.002
+        fun cKey(r: Long, c: Long): Long = (r shl 32) xor (c and 0xffffffffL)
+        for (i in 0 until alprCount) {
+            val cr = Math.floor(las[i] / cellDeg).toLong()
+            val cc = Math.floor(los[i] / cellDeg).toLong()
+            alprSpatial.getOrPut(cKey(cr, cc)) { ArrayList(2) }.add(i)
+        }
+
+        fun isNearAlpr(la: Double, lo: Double, radiusM: Double = 30.0): Boolean {
+            val cr = Math.floor(la / cellDeg).toLong()
+            val cc = Math.floor(lo / cellDeg).toLong()
+            val cosLat = Math.cos(Math.toRadians(la))
+            val mLat = 111_132.0
+            val mLng = 111_320.0 * cosLat
+            val r2 = radiusM * radiusM
+            var dr = -1L
+            while (dr <= 1L) {
+                var dc = -1L
+                while (dc <= 1L) {
+                    alprSpatial[cKey(cr + dr, cc + dc)]?.let { bucket ->
+                        for (idx in bucket) {
+                            val dy = (la - las[idx]) * mLat
+                            val dx = (lo - los[idx]) * mLng
+                            if (dx * dx + dy * dy <= r2) return true
+                        }
+                    }
+                    dc++
+                }
+                dr++
+            }
+            return false
+        }
+
+        // 2. Load bundled surveillance cameras (with ALPR duplicate filter)
         if (survStream != null) {
             runCatching {
-                parseInto(survStream, false, las, los, ops, dirs, alprs, intern)
+                parseInto(survStream, false, las, los, ops, dirs, alprs, intern, ::isNearAlpr)
             }
         }
 
-        // 3. Load extra live surveillance cameras cached on disk
+        // 3. Load extra live surveillance cameras cached on disk (with ALPR duplicate filter)
         if (liveSurv != null) {
             runCatching {
-                parseInto(liveSurv, false, las, los, ops, dirs, alprs, intern)
+                parseInto(liveSurv, false, las, los, ops, dirs, alprs, intern, ::isNearAlpr)
             }
         }
 
@@ -150,6 +186,7 @@ object FlockCameras {
         dirs: ArrayList<Float>,
         alprs: ArrayList<Boolean>,
         intern: HashMap<String, String>,
+        alprFilter: ((Double, Double) -> Boolean)? = null,
     ) {
         raw.use { r ->
             GZIPInputStream(r).bufferedReader(Charsets.UTF_8).useLines { lines ->
@@ -158,6 +195,7 @@ object FlockCameras {
                     val t2 = line.indexOf('\t', t1 + 1); if (t2 < 0) continue
                     val la = line.substring(0, t1).toDoubleOrNull() ?: continue
                     val lo = line.substring(t1 + 1, t2).toDoubleOrNull() ?: continue
+                    if (alprFilter != null && alprFilter(la, lo)) continue
                     val t3 = line.indexOf('\t', t2 + 1)
                     val o: String
                     val dg: Float
@@ -187,11 +225,12 @@ object FlockCameras {
     }
 
     /**
-     * Persist newly discovered surveillance / ALPR cameras from live queries onto disk,
-     * ensuring they are available locally immediately on subsequent launches.
+     * Persist newly discovered surveillance cameras from live queries onto disk,
+     * strictly excluding any ALPR camera to prevent duplicates.
      */
     suspend fun rememberNewCameras(context: Context, newCameras: List<AlprCamera>) = withContext(Dispatchers.IO) {
-        if (newCameras.isEmpty()) return@withContext
+        val nonAlprOnly = newCameras.filter { !it.isAlpr }
+        if (nonAlprOnly.isEmpty()) return@withContext
         val liveFile = liveSurvBin(context)
         val tmp = File(dir(context), "live_surveillance.bin.tmp")
         val existing = if (liveFile.exists()) {
@@ -206,8 +245,7 @@ object FlockCameras {
                                 val lo = parts[1].toDoubleOrNull() ?: continue
                                 val o = parts.getOrNull(2).orEmpty()
                                 val d = parts.getOrNull(3).orEmpty()
-                                val alpr = parts.getOrNull(4)?.toBooleanStrictOrNull() ?: false
-                                list.add(AlprCamera(LatLng(la, lo), o, d, isAlpr = alpr))
+                                list.add(AlprCamera(LatLng(la, lo), o, d, isAlpr = false))
                             }
                         }
                     }
@@ -216,12 +254,12 @@ object FlockCameras {
             }.getOrDefault(emptyList())
         } else emptyList()
 
-        val deduped = mergeAndDedupe(existing, newCameras, radiusM = 30.0)
+        val deduped = mergeAndDedupe(existing, nonAlprOnly, radiusM = 30.0)
         if (deduped.size > existing.size) {
             runCatching {
                 java.util.zip.GZIPOutputStream(tmp.outputStream()).bufferedWriter(Charsets.UTF_8).use { w ->
                     for (c in deduped) {
-                        w.write("${c.loc.lat}\t${c.loc.lng}\t${c.operator}\t${c.direction}\t${c.isAlpr}\n")
+                        w.write("${c.loc.lat}\t${c.loc.lng}\t${c.operator}\t${c.direction}\tfalse\n")
                     }
                 }
                 if (!tmp.renameTo(liveFile)) {
