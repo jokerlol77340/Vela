@@ -1,6 +1,7 @@
 package app.vela.core.nav
 
 import app.vela.core.model.LatLng
+import app.vela.core.model.TravelMode
 
 /**
  * Where to try a side street around the plate cameras on a route (issue #600).
@@ -87,21 +88,40 @@ object CameraDetour {
     }
 
     /**
-     * Candidates with multiple progressive offset distances (250m, 500m, 1000m, 1800m)
+     * Candidates with multiple progressive offset distances adapted by travel mode
      * and pre-camera exit anticipation for Total Avoidance.
      */
     fun candidatesMulti(
         poly: List<LatLng>,
         cameraAlongM: List<Double>,
         isTotalAvoidance: Boolean,
+        mode: TravelMode = TravelMode.DRIVE,
         maxClusters: Int = if (isTotalAvoidance) 8 else MAX_CLUSTERS,
     ): List<CandidateMulti> {
         if (poly.size < 2 || cameraAlongM.isEmpty()) return emptyList()
         val cum = RouteProjection.cumulative(poly)
-        val offsets = if (isTotalAvoidance) {
-            listOf(250.0, 500.0, 1000.0, 1800.0)
-        } else {
-            listOf(OFFSET_M, 300.0)
+        val (offsets, preExitM) = when (mode) {
+            TravelMode.WALK -> {
+                if (isTotalAvoidance) {
+                    listOf(50.0, 100.0, 200.0, 350.0) to 30.0
+                } else {
+                    listOf(50.0, 100.0) to 30.0
+                }
+            }
+            TravelMode.BICYCLE -> {
+                if (isTotalAvoidance) {
+                    listOf(100.0, 200.0, 450.0, 800.0) to 60.0
+                } else {
+                    listOf(100.0, 200.0) to 60.0
+                }
+            }
+            else -> {
+                if (isTotalAvoidance) {
+                    listOf(250.0, 500.0, 1000.0, 1800.0) to 150.0
+                } else {
+                    listOf(OFFSET_M, 300.0) to 150.0
+                }
+            }
         }
         return CameraAlerts.group(cameraAlongM.sorted()).take(maxClusters).map { g ->
             val p = RouteProjection.pointAt(poly, cum, g.atM)
@@ -110,9 +130,9 @@ object CameraDetour {
             for (off in offsets) {
                 vias.add(offset(p, brg - 90.0, off))
                 vias.add(offset(p, brg + 90.0, off))
-                if (isTotalAvoidance && off >= 500.0 && g.atM >= 150.0) {
-                    val pBefore = RouteProjection.pointAt(poly, cum, (g.atM - 150.0).coerceAtLeast(0.0))
-                    val brgBefore = RouteProjection.bearingAt(poly, cum, (g.atM - 150.0).coerceAtLeast(0.0))
+                if (isTotalAvoidance && off >= offsets[1] && g.atM >= preExitM) {
+                    val pBefore = RouteProjection.pointAt(poly, cum, (g.atM - preExitM).coerceAtLeast(0.0))
+                    val brgBefore = RouteProjection.bearingAt(poly, cum, (g.atM - preExitM).coerceAtLeast(0.0))
                     vias.add(offset(pBefore, brgBefore - 90.0, off))
                     vias.add(offset(pBefore, brgBefore + 90.0, off))
                 }

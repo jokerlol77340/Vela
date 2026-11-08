@@ -86,17 +86,11 @@ object FlockRouteAlert {
         }
     }
 
-    fun targetsFor(mode: TravelMode): Set<CameraAvoidTarget> {
-        val configured = when (mode) {
-            TravelMode.DRIVE -> driveTargets.value
-            TravelMode.WALK -> walkTargets.value
-            TravelMode.BICYCLE -> bikeTargets.value
-            else -> emptySet()
-        }
-        if (configured.isEmpty() && FlockDetour.mode.value == CameraAvoidDetourMode.TOTAL_AVOIDANCE) {
-            return CameraAvoidTarget.allowedFor(mode).toSet()
-        }
-        return configured
+    fun targetsFor(mode: TravelMode): Set<CameraAvoidTarget> = when (mode) {
+        TravelMode.DRIVE -> driveTargets.value
+        TravelMode.WALK -> walkTargets.value
+        TravelMode.BICYCLE -> bikeTargets.value
+        else -> emptySet()
     }
 
     fun isEnabledFor(mode: TravelMode): Boolean = targetsFor(mode).isNotEmpty()

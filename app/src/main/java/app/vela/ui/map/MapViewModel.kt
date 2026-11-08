@@ -7035,7 +7035,7 @@ class MapViewModel @Inject constructor(
                 if (hits.isEmpty()) return@withContext emptyList()
                 val along = hits.mapNotNull { loc -> app.vela.core.nav.RouteProjection.alongMeters(poly, cum, loc, 60.0) }
                 app.vela.core.nav.CameraDetour.untriedMulti(
-                    app.vela.core.nav.CameraDetour.candidatesMulti(poly, along, isTotalAvoidance),
+                    app.vela.core.nav.CameraDetour.candidatesMulti(poly, along, isTotalAvoidance, mode),
                     tried
                 )
             }
