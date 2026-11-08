@@ -572,6 +572,7 @@ private var lastPoiFuelOnly: Boolean? = null // identity-gate the nav gas-statio
 private var openHiddenIds: Set<String> = emptySet()
 private var openDisplacedIds: Set<String> = emptySet()
 private var openFuelDisplacedIds: Set<String> = emptySet()
+private var osmFuelExclude: Set<String> = emptySet()
 private var ambientKeptFuelPositions: List<LatLng> = emptyList()
 private const val DEDUPE_NAME_M = 80.0 // agreeing names within this range = the same business, twice
 // The SAME name (after normalizing) reaches farther: Overture often pins a store at its parcel's
@@ -1739,7 +1740,7 @@ fun VelaMapView(
         // canonical GTFS stops layer during turn-by-turn (user drive 2026-07-14) and restore on
         // exit. The per-viewport stop FETCH is also skipped while navigating (MapViewModel).
         runCatching {
-            val transitVis = if (navMode && !app.vela.ui.MapPoiPrefs.transitStopShowInNav.value) Property.NONE else Property.VISIBLE
+            val transitVis = if (if (navMode) app.vela.ui.MapPoiPrefs.transitStopShowInNav.value else app.vela.ui.MapPoiPrefs.transitStopShowInMap.value) Property.VISIBLE else Property.NONE
             style.getLayer(TRANSIT_STOPS_LAYER)?.setProperties(PropertyFactory.visibility(transitVis))
         }
         // CAR-MODE strip (drive nav only, 2026-07-16 - the battery report): basemap highway
@@ -1760,7 +1761,7 @@ fun VelaMapView(
         // regardless of the pref; flipping the toggle then hid it "correctly" and the bug looked
         // session-specific. Restore it to the TOGGLE instead, and key the effect on it so a flip
         // mid-drive is not lost.
-        val shieldVis = if (navMode && navDriveMode && !app.vela.ui.MapPoiPrefs.roadShieldShowInNav.value) Property.NONE else Property.VISIBLE
+        val shieldVis = if (if (navMode && navDriveMode) app.vela.ui.MapPoiPrefs.roadShieldShowInNav.value else app.vela.ui.MapPoiPrefs.roadShieldShowInMap.value) Property.VISIBLE else Property.NONE
         runCatching {
             listOf("highway-shield-non-us", "highway-shield-us-interstate", "road_shield_us").forEach { id ->
                 style.getLayer(id)?.setProperties(PropertyFactory.visibility(shieldVis))
@@ -2658,6 +2659,15 @@ fun VelaMapView(
     val parkingScale = app.vela.ui.MapPoiPrefs.parkingScale.floatValue
     val savedPinScale = app.vela.ui.MapPoiPrefs.savedPinScale.floatValue
     val wazeIconScale = app.vela.ui.WazeAlertsPref.wazeIconScale.floatValue
+    val foodScale = app.vela.ui.MapPoiPrefs.foodScale.floatValue
+    val shopScale = app.vela.ui.MapPoiPrefs.shopScale.floatValue
+    val sportScale = app.vela.ui.MapPoiPrefs.sportScale.floatValue
+    val eduScale = app.vela.ui.MapPoiPrefs.eduScale.floatValue
+    val healthScale = app.vela.ui.MapPoiPrefs.healthScale.floatValue
+    val lodgingScale = app.vela.ui.MapPoiPrefs.lodgingScale.floatValue
+    val cultureScale = app.vela.ui.MapPoiPrefs.cultureScale.floatValue
+    val civicScale = app.vela.ui.MapPoiPrefs.civicScale.floatValue
+    val parkScale = app.vela.ui.MapPoiPrefs.parkScale.floatValue
 
     val speedcamMinZoom = app.vela.ui.MapPoiPrefs.speedcamMinZoom.floatValue
     val flockMinZoom = app.vela.ui.MapPoiPrefs.flockMinZoom.floatValue
@@ -2674,6 +2684,40 @@ fun VelaMapView(
     val parkingMinZoom = app.vela.ui.MapPoiPrefs.parkingMinZoom.floatValue
     val savedPinMinZoom = app.vela.ui.MapPoiPrefs.savedPinMinZoom.floatValue
     val wazeMinZoom = app.vela.ui.WazeAlertsPref.wazeMinZoom.floatValue
+    val foodMinZoom = app.vela.ui.MapPoiPrefs.foodMinZoom.floatValue
+    val shopMinZoom = app.vela.ui.MapPoiPrefs.shopMinZoom.floatValue
+    val sportMinZoom = app.vela.ui.MapPoiPrefs.sportMinZoom.floatValue
+    val eduMinZoom = app.vela.ui.MapPoiPrefs.eduMinZoom.floatValue
+    val healthMinZoom = app.vela.ui.MapPoiPrefs.healthMinZoom.floatValue
+    val lodgingMinZoom = app.vela.ui.MapPoiPrefs.lodgingMinZoom.floatValue
+    val cultureMinZoom = app.vela.ui.MapPoiPrefs.cultureMinZoom.floatValue
+    val civicMinZoom = app.vela.ui.MapPoiPrefs.civicMinZoom.floatValue
+    val parkMinZoom = app.vela.ui.MapPoiPrefs.parkMinZoom.floatValue
+
+    val speedcamShowInMap = app.vela.ui.MapPoiPrefs.speedcamShowInMap.value
+    val flockShowInMap = app.vela.ui.MapPoiPrefs.flockShowInMap.value
+    val survCamShowInMap = app.vela.ui.MapPoiPrefs.surveillanceCamShowInMap.value
+    val signalShowInMap = app.vela.ui.MapPoiPrefs.signalShowInMap.value
+    val stopSignShowInMap = app.vela.ui.MapPoiPrefs.stopSignShowInMap.value
+    val railCrossingShowInMap = app.vela.ui.MapPoiPrefs.railCrossingShowInMap.value
+    val speedHumpShowInMap = app.vela.ui.MapPoiPrefs.speedHumpShowInMap.value
+    val roadShieldShowInMap = app.vela.ui.MapPoiPrefs.roadShieldShowInMap.value
+    val exitNumberShowInMap = app.vela.ui.MapPoiPrefs.exitNumberShowInMap.value
+    val fuelStationShowInMap = app.vela.ui.MapPoiPrefs.fuelStationShowInMap.value
+    val transitStopShowInMap = app.vela.ui.MapPoiPrefs.transitStopShowInMap.value
+    val poiPlaceShowInMap = app.vela.ui.MapPoiPrefs.poiPlaceShowInMap.value
+    val parkingShowInMap = app.vela.ui.MapPoiPrefs.parkingShowInMap.value
+    val savedPinShowInMap = app.vela.ui.MapPoiPrefs.savedPinShowInMap.value
+    val wazeShowInMap = app.vela.ui.WazeAlertsPref.wazeShowInMap.value
+    val foodShowInMap = app.vela.ui.MapPoiPrefs.foodShowInMap.value
+    val shopShowInMap = app.vela.ui.MapPoiPrefs.shopShowInMap.value
+    val sportShowInMap = app.vela.ui.MapPoiPrefs.sportShowInMap.value
+    val eduShowInMap = app.vela.ui.MapPoiPrefs.eduShowInMap.value
+    val healthShowInMap = app.vela.ui.MapPoiPrefs.healthShowInMap.value
+    val lodgingShowInMap = app.vela.ui.MapPoiPrefs.lodgingShowInMap.value
+    val cultureShowInMap = app.vela.ui.MapPoiPrefs.cultureShowInMap.value
+    val civicShowInMap = app.vela.ui.MapPoiPrefs.civicShowInMap.value
+    val parkShowInMap = app.vela.ui.MapPoiPrefs.parkShowInMap.value
 
     val speedcamShowInNav = app.vela.ui.MapPoiPrefs.speedcamShowInNav.value
     val flockShowInNav = app.vela.ui.MapPoiPrefs.flockShowInNav.value
@@ -2690,22 +2734,86 @@ fun VelaMapView(
     val parkingShowInNav = app.vela.ui.MapPoiPrefs.parkingShowInNav.value
     val savedPinShowInNav = app.vela.ui.MapPoiPrefs.savedPinShowInNav.value
     val wazeShowInNav = app.vela.ui.WazeAlertsPref.wazeShowInNav.value
+    val foodShowInNav = app.vela.ui.MapPoiPrefs.foodShowInNav.value
+    val shopShowInNav = app.vela.ui.MapPoiPrefs.shopShowInNav.value
+    val sportShowInNav = app.vela.ui.MapPoiPrefs.sportShowInNav.value
+    val eduShowInNav = app.vela.ui.MapPoiPrefs.eduShowInNav.value
+    val healthShowInNav = app.vela.ui.MapPoiPrefs.healthShowInNav.value
+    val lodgingShowInNav = app.vela.ui.MapPoiPrefs.lodgingShowInNav.value
+    val cultureShowInNav = app.vela.ui.MapPoiPrefs.cultureShowInNav.value
+    val civicShowInNav = app.vela.ui.MapPoiPrefs.civicShowInNav.value
+    val parkShowInNav = app.vela.ui.MapPoiPrefs.parkShowInNav.value
 
     LaunchedEffect(
         styleRef, poiIconScale, poiLabelScale, navMode,
-        speedcamScale, flockScale, survCamScale, signalScale, stopSignScale, railCrossingScale, speedHumpScale,
-        roadShieldScale, exitNumberScale, fuelStationScale, transitStopScale, poiPlaceScale, parkingScale, savedPinScale, wazeIconScale,
-        speedcamMinZoom, flockMinZoom, survCamMinZoom, signalMinZoom, stopSignMinZoom, railCrossingMinZoom, speedHumpMinZoom,
-        roadShieldMinZoom, exitNumberMinZoom, fuelStationMinZoom, transitStopMinZoom, poiPlaceMinZoom, parkingMinZoom, savedPinMinZoom, wazeMinZoom,
-        speedcamShowInNav, flockShowInNav, survCamShowInNav, signalShowInNav, stopSignShowInNav, railCrossingShowInNav, speedHumpShowInNav,
-        roadShieldShowInNav, exitNumberShowInNav, fuelStationShowInNav, transitStopShowInNav, poiPlaceShowInNav, parkingShowInNav, savedPinShowInNav, wazeShowInNav,
+        listOf(
+            speedcamScale, flockScale, survCamScale, signalScale, stopSignScale, railCrossingScale, speedHumpScale,
+            roadShieldScale, exitNumberScale, fuelStationScale, transitStopScale, poiPlaceScale, parkingScale, savedPinScale, wazeIconScale,
+            foodScale, shopScale, sportScale, eduScale, healthScale, lodgingScale, cultureScale, civicScale, parkScale,
+        ),
+        listOf(
+            speedcamMinZoom, flockMinZoom, survCamMinZoom, signalMinZoom, stopSignMinZoom, railCrossingMinZoom, speedHumpMinZoom,
+            roadShieldMinZoom, exitNumberMinZoom, fuelStationMinZoom, transitStopMinZoom, poiPlaceMinZoom, parkingMinZoom, savedPinMinZoom, wazeMinZoom,
+            foodMinZoom, shopMinZoom, sportMinZoom, eduMinZoom, healthMinZoom, lodgingMinZoom, cultureMinZoom, civicMinZoom, parkMinZoom,
+        ),
+        listOf(
+            speedcamShowInMap, flockShowInMap, survCamShowInMap, signalShowInMap, stopSignShowInMap, railCrossingShowInMap, speedHumpShowInMap,
+            roadShieldShowInMap, exitNumberShowInMap, fuelStationShowInMap, transitStopShowInMap, poiPlaceShowInMap, parkingShowInMap, savedPinShowInMap, wazeShowInMap,
+            foodShowInMap, shopShowInMap, sportShowInMap, eduShowInMap, healthShowInMap, lodgingShowInMap, cultureShowInMap, civicShowInMap, parkShowInMap,
+        ),
+        listOf(
+            speedcamShowInNav, flockShowInNav, survCamShowInNav, signalShowInNav, stopSignShowInNav, railCrossingShowInNav, speedHumpShowInNav,
+            roadShieldShowInNav, exitNumberShowInNav, fuelStationShowInNav, transitStopShowInNav, poiPlaceShowInNav, parkingShowInNav, savedPinShowInNav, wazeShowInNav,
+            foodShowInNav, shopShowInNav, sportShowInNav, eduShowInNav, healthShowInNav, lodgingShowInNav, cultureShowInNav, civicShowInNav, parkShowInNav,
+        ),
     ) {
         val st = styleRef ?: return@LaunchedEffect
         val sc = poiIconScale
         val lc = poiLabelScale
         runCatching {
+            fun effShow(scale: Float, inMap: Boolean, inNav: Boolean): Boolean =
+                scale > 0f && (if (navMode) inNav else inMap)
+
+            val effSpeedcamShow = effShow(speedcamScale, speedcamShowInMap, speedcamShowInNav)
+            val effFlockShow = effShow(flockScale, flockShowInMap, flockShowInNav)
+            val effSurvShow = effShow(survCamScale, survCamShowInMap, survCamShowInNav)
+            val effSignalShow = effShow(signalScale, signalShowInMap, signalShowInNav)
+            val effStopShow = effShow(stopSignScale, stopSignShowInMap, stopSignShowInNav)
+            val effRailxShow = effShow(railCrossingScale, railCrossingShowInMap, railCrossingShowInNav)
+            val effHumpShow = effShow(speedHumpScale, speedHumpShowInMap, speedHumpShowInNav)
+            val effShieldShow = effShow(roadShieldScale, roadShieldShowInMap, roadShieldShowInNav)
+            val effExitShow = effShow(exitNumberScale, exitNumberShowInMap, exitNumberShowInNav)
+            val effFuelShow = effShow(fuelStationScale, fuelStationShowInMap, fuelStationShowInNav)
+            val effParkingShow = effShow(parkingScale, parkingShowInMap, parkingShowInNav)
+            val effTransitShow = effShow(transitStopScale, transitStopShowInMap, transitStopShowInNav)
+            val effPlaceShow = effShow(poiPlaceScale, poiPlaceShowInMap, poiPlaceShowInNav)
+            val effSavedShow = effShow(savedPinScale, savedPinShowInMap, savedPinShowInNav)
+            val effWazeShow = effShow(wazeIconScale, wazeShowInMap, wazeShowInNav)
+            val effFoodShow = effShow(foodScale, foodShowInMap, foodShowInNav)
+            val effShopShow = effShow(shopScale, shopShowInMap, shopShowInNav)
+            val effSportShow = effShow(sportScale, sportShowInMap, sportShowInNav)
+            val effEduShow = effShow(eduScale, eduShowInMap, eduShowInNav)
+            val effHealthShow = effShow(healthScale, healthShowInMap, healthShowInNav)
+            val effLodgingShow = effShow(lodgingScale, lodgingShowInMap, lodgingShowInNav)
+            val effCultureShow = effShow(cultureScale, cultureShowInMap, cultureShowInNav)
+            val effCivicShow = effShow(civicScale, civicShowInMap, civicShowInNav)
+            val effParkShow = effShow(parkScale, parkShowInMap, parkShowInNav)
+
+            val effFuelScale = if (effFuelShow) fuelStationScale else 0f
+            val effParkingScale = if (effParkingShow) parkingScale else 0f
+            val effFoodScale = if (effFoodShow) foodScale else 0f
+            val effShopScale = if (effShopShow) shopScale else 0f
+            val effSportScale = if (effSportShow) sportScale else 0f
+            val effEduScale = if (effEduShow) eduScale else 0f
+            val effHealthScale = if (effHealthShow) healthScale else 0f
+            val effLodgingScale = if (effLodgingShow) lodgingScale else 0f
+            val effCultureScale = if (effCultureShow) cultureScale else 0f
+            val effCivicScale = if (effCivicShow) civicScale else 0f
+            val effParkScale = if (effParkShow) parkScale else 0f
+            val effPlaceScale = if (effPlaceShow) poiPlaceScale else 0f
+
             RoadShields.applyScales(st, shieldScale = roadShieldScale, exitScale = exitNumberScale)
-            val shieldVis = if (roadShieldScale <= 0f || (navMode && !roadShieldShowInNav)) Property.NONE else Property.VISIBLE
+            val shieldVis = if (!effShieldShow) Property.NONE else Property.VISIBLE
             val navShield = st.getLayer(NAV_SHIELD_LAYER) as? SymbolLayer
             navShield?.setProperties(
                 PropertyFactory.visibility(shieldVis),
@@ -2714,7 +2822,7 @@ fun VelaMapView(
             )
             if (roadShieldMinZoom > 0f) navShield?.minZoom = roadShieldMinZoom
 
-            val exitVis = if (exitNumberScale <= 0f || (navMode && !exitNumberShowInNav)) Property.NONE else Property.VISIBLE
+            val exitVis = if (!effExitShow) Property.NONE else Property.VISIBLE
             val navExit = st.getLayer(NAV_EXIT_LAYER) as? SymbolLayer
             navExit?.setProperties(
                 PropertyFactory.visibility(exitVis),
@@ -2722,9 +2830,6 @@ fun VelaMapView(
             )
             if (exitNumberMinZoom > 0f) navExit?.minZoom = exitNumberMinZoom
 
-            val effFuelScale = if (navMode && !fuelStationShowInNav) 0f else fuelStationScale
-            val effParkingScale = if (navMode && !parkingShowInNav) 0f else parkingScale
-            val effPlaceScale = if (navMode && !poiPlaceShowInNav) 0f else poiPlaceScale
             fun poiProminenceExpr(lowBase: Float, highBase: Float, baseMult: Float): Expression {
                 fun interp(m: Float) = Expression.interpolate(
                     Expression.linear(), Expression.get("prominence"),
@@ -2733,47 +2838,106 @@ fun VelaMapView(
                 )
                 return Expression.match(
                     Expression.get("group"),
-                    Expression.literal("fuel"), interp(effFuelScale),
-                    Expression.literal("parking"), interp(effParkingScale),
                     interp(effPlaceScale),
+                    Expression.stop("fuel", interp(effFuelScale)),
+                    Expression.stop("parking", interp(effParkingScale)),
+                    Expression.stop("food", interp(effFoodScale)),
+                    Expression.stop("shop", interp(effShopScale)),
+                    Expression.stop("sport", interp(effSportScale)),
+                    Expression.stop("edu", interp(effEduScale)),
+                    Expression.stop("health", interp(effHealthScale)),
+                    Expression.stop("lodging", interp(effLodgingScale)),
+                    Expression.stop("culture", interp(effCultureScale)),
+                    Expression.stop("civic", interp(effCivicScale)),
+                    Expression.stop("park", interp(effParkScale)),
                 )
             }
+            fun groupOp(isShown: Boolean, minZ: Float): Expression {
+                if (!isShown) return Expression.literal(0f)
+                return if (minZ > 0f) Expression.step(Expression.zoom(), Expression.literal(0f), Expression.stop(minZ, Expression.literal(1f))) else Expression.literal(1f)
+            }
+            val poiGroupOpacityExpr = Expression.match(
+                Expression.get("group"),
+                groupOp(effPlaceShow, poiPlaceMinZoom),
+                Expression.stop("fuel", groupOp(effFuelShow, fuelStationMinZoom)),
+                Expression.stop("parking", groupOp(effParkingShow, parkingMinZoom)),
+                Expression.stop("food", groupOp(effFoodShow, foodMinZoom)),
+                Expression.stop("shop", groupOp(effShopShow, shopMinZoom)),
+                Expression.stop("sport", groupOp(effSportShow, sportMinZoom)),
+                Expression.stop("edu", groupOp(effEduShow, eduMinZoom)),
+                Expression.stop("health", groupOp(effHealthShow, healthMinZoom)),
+                Expression.stop("lodging", groupOp(effLodgingShow, lodgingMinZoom)),
+                Expression.stop("culture", groupOp(effCultureShow, cultureMinZoom)),
+                Expression.stop("civic", groupOp(effCivicShow, civicMinZoom)),
+                Expression.stop("park", groupOp(effParkShow, parkMinZoom)),
+            )
             val poiIconExpr = poiProminenceExpr(0.78f, 1.3f, sc)
             val poiTextExpr = poiProminenceExpr(11f, 14f, lc)
             val poiDotExpr = poiProminenceExpr(2.6f, 4.2f, sc)
             st.getLayer(AMBIENT_LAYER)?.let { l ->
-                if (fuelStationMinZoom > 0f || poiPlaceMinZoom > 0f) {
-                    val mZ = listOfNotNull(
-                        if (effFuelScale > 0f && fuelStationMinZoom > 0f) fuelStationMinZoom else null,
-                        if (effPlaceScale > 0f && poiPlaceMinZoom > 0f) poiPlaceMinZoom else null,
-                    ).minOrNull()
-                    if (mZ != null) l.minZoom = mZ
-                }
                 l.setProperties(
                     PropertyFactory.iconSize(poiIconExpr),
                     PropertyFactory.textSize(poiTextExpr),
+                    PropertyFactory.iconOpacity(poiGroupOpacityExpr),
+                    PropertyFactory.textOpacity(poiGroupOpacityExpr),
                 )
             }
             st.getLayer(AMBIENT_DOT_LAYER)?.setProperties(
                 PropertyFactory.circleRadius(poiDotExpr),
+                PropertyFactory.circleOpacity(poiGroupOpacityExpr),
             )
             val openPoiDotExpr = poiProminenceExpr(2.2f, 3.6f, sc)
             st.layers.forEach { l ->
                 when {
-                    l.id.startsWith("vela-places-dots-") -> l.setProperties(PropertyFactory.circleRadius(openPoiDotExpr))
-                    l.id.startsWith("vela-places-") -> l.setProperties(PropertyFactory.iconSize(poiIconExpr))
+                    l.id.startsWith("vela-places-dots-") -> l.setProperties(
+                        PropertyFactory.circleRadius(openPoiDotExpr),
+                        PropertyFactory.circleOpacity(poiGroupOpacityExpr),
+                    )
+                    l.id.startsWith("vela-places-") -> l.setProperties(
+                        PropertyFactory.iconSize(poiIconExpr),
+                        PropertyFactory.iconOpacity(poiGroupOpacityExpr),
+                        PropertyFactory.textOpacity(poiGroupOpacityExpr),
+                    )
                 }
             }
+            fun osmClassSize(scale: Float): Expression = Expression.literal(0.8f * sc * scale)
             val osmPoiSize = Expression.match(
                 Expression.get("class"),
-                Expression.literal("fuel"), Expression.literal(0.8f * sc * effFuelScale),
-                Expression.literal("parking"), Expression.literal(0.8f * sc * effParkingScale),
-                Expression.literal(0.8f * sc * effPlaceScale),
+                osmClassSize(effPlaceScale),
+                Expression.stop(arrayOf("restaurant", "fast_food", "cafe", "bar", "pub", "food_court", "ice_cream", "bakery", "food", "beer", "deli", "confectionery"), osmClassSize(effFoodScale)),
+                Expression.stop(arrayOf("shop", "grocery", "supermarket", "convenience", "clothing_store", "mall", "department_store", "jewelry", "gift", "books", "furniture", "hardware", "florist", "mobile_phone", "optician", "hairdresser", "laundry", "butcher", "greengrocer", "marketplace", "car", "bicycle", "outdoor", "chemist", "shoes", "toys"), osmClassSize(effShopScale)),
+                Expression.stop("lodging", osmClassSize(effLodgingScale)),
+                Expression.stop("fuel", osmClassSize(effFuelScale)),
+                Expression.stop(arrayOf("parking", "bicycle_parking"), osmClassSize(effParkingScale)),
+                Expression.stop(arrayOf("park", "garden", "nature_reserve", "golf", "pitch", "playground", "dog_park", "picnic_site"), osmClassSize(effParkScale)),
+                Expression.stop(arrayOf("hospital", "pharmacy", "doctors", "dentist", "veterinary", "clinic"), osmClassSize(effHealthScale)),
+                Expression.stop(arrayOf("school", "college", "university", "library", "kindergarten"), osmClassSize(effEduScale)),
+                Expression.stop(arrayOf("bank", "atm", "post", "police", "fire_station", "town_hall", "courthouse", "place_of_worship", "cemetery", "community_centre"), osmClassSize(effCivicScale)),
+                Expression.stop(arrayOf("museum", "art_gallery", "cinema", "theatre", "attraction", "gallery", "information", "artwork", "viewpoint", "aquarium", "zoo"), osmClassSize(effCultureScale)),
+                Expression.stop(arrayOf("stadium", "sports", "sports_centre", "fitness_centre", "swimming_pool"), osmClassSize(effSportScale)),
+            )
+            val osmPoiOpacity = Expression.match(
+                Expression.get("class"),
+                groupOp(effPlaceShow, poiPlaceMinZoom),
+                Expression.stop(arrayOf("restaurant", "fast_food", "cafe", "bar", "pub", "food_court", "ice_cream", "bakery", "food", "beer", "deli", "confectionery"), groupOp(effFoodShow, foodMinZoom)),
+                Expression.stop(arrayOf("shop", "grocery", "supermarket", "convenience", "clothing_store", "mall", "department_store", "jewelry", "gift", "books", "furniture", "hardware", "florist", "mobile_phone", "optician", "hairdresser", "laundry", "butcher", "greengrocer", "marketplace", "car", "bicycle", "outdoor", "chemist", "shoes", "toys"), groupOp(effShopShow, shopMinZoom)),
+                Expression.stop("lodging", groupOp(effLodgingShow, lodgingMinZoom)),
+                Expression.stop("fuel", groupOp(effFuelShow, fuelStationMinZoom)),
+                Expression.stop(arrayOf("parking", "bicycle_parking"), groupOp(effParkingShow, parkingMinZoom)),
+                Expression.stop(arrayOf("park", "garden", "nature_reserve", "golf", "pitch", "playground", "dog_park", "picnic_site"), groupOp(effParkShow, parkMinZoom)),
+                Expression.stop(arrayOf("hospital", "pharmacy", "doctors", "dentist", "veterinary", "clinic"), groupOp(effHealthShow, healthMinZoom)),
+                Expression.stop(arrayOf("school", "college", "university", "library", "kindergarten"), groupOp(effEduShow, eduMinZoom)),
+                Expression.stop(arrayOf("bank", "atm", "post", "police", "fire_station", "town_hall", "courthouse", "place_of_worship", "cemetery", "community_centre"), groupOp(effCivicShow, civicMinZoom)),
+                Expression.stop(arrayOf("museum", "art_gallery", "cinema", "theatre", "attraction", "gallery", "information", "artwork", "viewpoint", "aquarium", "zoo"), groupOp(effCultureShow, cultureMinZoom)),
+                Expression.stop(arrayOf("stadium", "sports", "sports_centre", "fitness_centre", "swimming_pool"), groupOp(effSportShow, sportMinZoom)),
             )
             listOf("poi_r1", "poi_r7", "poi_r20").forEach { id ->
-                st.getLayer(id)?.setProperties(PropertyFactory.iconSize(osmPoiSize))
+                st.getLayer(id)?.setProperties(
+                    PropertyFactory.iconSize(osmPoiSize),
+                    PropertyFactory.iconOpacity(osmPoiOpacity),
+                    PropertyFactory.textOpacity(osmPoiOpacity),
+                )
             }
-            val effTransitShow = transitStopScale > 0f && (!navMode || transitStopShowInNav)
             val trSc = sc * (if (effTransitShow) transitStopScale else 0.0001f)
             st.getLayer(TRANSIT_STOPS_LAYER)?.let { l ->
                 if (transitStopMinZoom > 0f) l.minZoom = transitStopMinZoom
@@ -2789,7 +2953,6 @@ fun VelaMapView(
                     PropertyFactory.textOpacity(if (effTransitShow) 1f else 0f),
                 )
             }
-            val effParkingShow = parkingScale > 0f && (!navMode || parkingShowInNav)
             st.getLayer(PARKING_LAYER)?.let { l ->
                 if (parkingMinZoom > 0f) l.minZoom = parkingMinZoom
                 l.setProperties(
@@ -2797,10 +2960,6 @@ fun VelaMapView(
                     PropertyFactory.iconOpacity(if (effParkingShow) 1f else 0f),
                 )
             }
-            val effSignalShow = signalScale > 0f && (!navMode || signalShowInNav)
-            val effStopShow = stopSignScale > 0f && (!navMode || stopSignShowInNav)
-            val effRailxShow = railCrossingScale > 0f && (!navMode || railCrossingShowInNav)
-            val effHumpShow = speedHumpScale > 0f && (!navMode || speedHumpShowInNav)
             val controlsScaled = controlsSizeExpression(
                 baseScale = sc,
                 signalScale = if (effSignalShow) signalScale else 0.0001f,
@@ -2830,7 +2989,6 @@ fun VelaMapView(
                     PropertyFactory.iconOpacity(controlsOpacity),
                 )
             }
-            val effSavedShow = savedPinScale > 0f && (!navMode || savedPinShowInNav)
             val pinSc = sc * (if (effSavedShow) savedPinScale else 0.0001f)
             listOf(MARKERS_LAYER, MARKERS_DOTS_LAYER, SAVED_LAYER).forEach { id ->
                 if (savedPinMinZoom > 0f) st.getLayer(id)?.minZoom = savedPinMinZoom
@@ -2849,9 +3007,7 @@ fun VelaMapView(
                 PropertyFactory.iconSize(savedPinSize(pinSc)),
                 PropertyFactory.iconOpacity(if (effSavedShow) 1f else 0f),
             )
-            val effAlprShow = flockScale > 0f && (!navMode || flockShowInNav)
-            val effSurvShow = survCamScale > 0f && (!navMode || survCamShowInNav)
-            val alprFactor = if (effAlprShow) sc * flockScale else 0.0001f
+            val alprFactor = if (effFlockShow) sc * flockScale else 0.0001f
             val survFactor = if (effSurvShow) sc * survCamScale else 0.0001f
             val camScaleExpr = Expression.switchCase(
                 Expression.eq(Expression.get("isAlpr"), Expression.literal(true)),
@@ -2872,11 +3028,11 @@ fun VelaMapView(
             }
             val camOpacityExpr = Expression.switchCase(
                 Expression.eq(Expression.get("isAlpr"), Expression.literal(true)),
-                camTypeOpacity(effAlprShow, flockMinZoom),
+                camTypeOpacity(effFlockShow, flockMinZoom),
                 camTypeOpacity(effSurvShow, survCamMinZoom),
             )
             val camsMinZ = minOf(
-                if (effAlprShow && flockMinZoom > 0f) flockMinZoom else 11f,
+                if (effFlockShow && flockMinZoom > 0f) flockMinZoom else 11f,
                 if (effSurvShow && survCamMinZoom > 0f) survCamMinZoom else 11f,
             )
             val detailMinZ = if (camsMinZ < 14f) 14f else camsMinZ
@@ -2902,7 +3058,6 @@ fun VelaMapView(
                     PropertyFactory.iconOpacity(camOpacityExpr),
                 )
             }
-            val effSpeedcamShow = speedcamScale > 0f && (!navMode || speedcamShowInNav)
             val speedcamSc = if (effSpeedcamShow) sc * speedcamScale else 0.0001f
             val speedcamScaled = Expression.interpolate(
                 Expression.linear(), Expression.zoom(),
@@ -2920,7 +3075,6 @@ fun VelaMapView(
                     PropertyFactory.iconOpacity(scOp),
                 )
             }
-            val effWazeShow = wazeIconScale > 0f && (!navMode || wazeShowInNav)
             val wazeFactor = if (effWazeShow) sc * wazeIconScale else 0.0001f
             val wazeScaled = Expression.interpolate(
                 Expression.linear(), Expression.zoom(),
@@ -7109,6 +7263,16 @@ internal fun applyPoiTierFilters(style: StyleLayers, fuelOnly: Boolean) {
         Expression.geometryType(), Expression.literal(false),
         Expression.stop("Point", true), Expression.stop("MultiPoint", true),
     )
+    val allExclude = (osmPoiExclude + osmFuelExclude).toList()
+    val excludeFilter: Expression? = if (allExclude.isEmpty()) null else {
+        val nameExpr = Expression.coalesce(
+            Expression.get("name"),
+            Expression.get("name:latin"),
+            Expression.get("name_en"),
+            Expression.literal("")
+        )
+        Expression.not(Expression.`in`(nameExpr, Expression.literal(allExclude.toTypedArray<Any>())))
+    }
     if (fuelOnly) {
         val fuel = Expression.eq(Expression.get("class"), Expression.literal("fuel"))
         fun fuelTier(id: String, lo: Int, hi: Int?) {
@@ -7118,7 +7282,7 @@ internal fun applyPoiTierFilters(style: StyleLayers, fuelOnly: Boolean) {
                 // When open places overlays are actively drawing fuel in nav, or one-set is active, suppress duplicate OSM fuel
                 parts += Expression.literal(false)
             }
-            if (osmPoiExclude.isNotEmpty()) parts += Expression.not(Expression.`in`(Expression.get("name"), Expression.literal(osmPoiExclude.toTypedArray<Any>())))
+            if (excludeFilter != null) parts += excludeFilter
             (style.getLayer(id) as? SymbolLayer)?.setFilter(Expression.all(*parts.toTypedArray()))
         }
         fuelTier("poi_r1", 1, 7)
@@ -7142,7 +7306,7 @@ internal fun applyPoiTierFilters(style: StyleLayers, fuelOnly: Boolean) {
         val parts = mutableListOf(isPoint, Expression.gte(Expression.get("rank"), Expression.literal(lo)), Expression.not(veg))
         if (hi != null) parts += Expression.lt(Expression.get("rank"), Expression.literal(hi))
         if (osmHideBusiness) parts += Expression.not(Expression.`in`(Expression.get("class"), Expression.literal(OSM_BUSINESS_CLASSES)))
-        if (osmPoiExclude.isNotEmpty()) parts += Expression.not(Expression.`in`(Expression.get("name"), Expression.literal(osmPoiExclude.toTypedArray<Any>())))
+        if (excludeFilter != null) parts += excludeFilter
         (style.getLayer(id) as? SymbolLayer)?.setFilter(Expression.all(*parts.toTypedArray()))
     }
     tier("poi_r1", 1, 7)
@@ -7221,24 +7385,37 @@ private fun dedupeFuelStations(map: MapLibreMap, style: Style) {
             f.getStringProperty("class") == "fuel" || f.getStringProperty("subclass") == "fuel"
         }
         if (osmFuelFeatures.isNotEmpty()) {
-            val already = osmPoiExclude.toHashSet()
-            val add = LinkedHashSet<String>()
-            val osmKeptFuel = ArrayList<LatLng>()
-            for (f in osmFuelFeatures) {
-                val pt = f.geometry() as? Point ?: continue
-                val n = f.getStringProperty("name") ?: continue
-                if (n in already) continue
-                val ll = LatLng(pt.latitude(), pt.longitude())
-                if (openFuelLocations.any { it.distanceTo(ll) < 180.0 } || osmKeptFuel.any { it.distanceTo(ll) < 180.0 }) {
-                    add += n
+            class OsmFuelItem(val name: String, val loc: LatLng, val score: Int)
+            val fuelItems = osmFuelFeatures.mapNotNull { f ->
+                val n = f.getStringProperty("name") ?: f.getStringProperty("name:latin") ?: f.getStringProperty("name_en") ?: return@mapNotNull null
+                val pt = f.geometry() as? Point ?: return@mapNotNull null
+                val l = n.lowercase()
+                val isBrand = l.contains("total") || l.contains("shell") || l.contains("bp") || l.contains("esso") || l.contains("avia") || l.contains("eni") || l.contains("station")
+                val penalty = if (l.startsWith("rel.") || l.startsWith("relais")) -10 else 0
+                val score = (if (isBrand) 100 else 0) + penalty + n.length
+                OsmFuelItem(n, LatLng(pt.latitude(), pt.longitude()), score)
+            }
+            val keptFuel = ArrayList<OsmFuelItem>()
+            val excludedNames = LinkedHashSet<String>()
+            for (item in fuelItems.sortedByDescending { it.score }) {
+                if (openFuelLocations.any { it.distanceTo(item.loc) < 180.0 }) {
+                    excludedNames += item.name
+                    continue
+                }
+                val existing = keptFuel.firstOrNull { it.loc.distanceTo(item.loc) < 180.0 }
+                if (existing != null) {
+                    excludedNames += item.name
                 } else {
-                    osmKeptFuel += ll
+                    keptFuel.add(item)
                 }
             }
-            if (add.isNotEmpty()) {
-                osmPoiExclude = (osmPoiExclude + add).takeLast(OSM_EXCLUDE_MAX)
+            if (excludedNames != osmFuelExclude) {
+                osmFuelExclude = excludedNames
                 applyPoiTierFilters(style, lastPoiFuelOnly ?: false)
             }
+        } else if (osmFuelExclude.isNotEmpty()) {
+            osmFuelExclude = emptySet()
+            applyPoiTierFilters(style, lastPoiFuelOnly ?: false)
         }
     }
 }

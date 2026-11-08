@@ -1643,8 +1643,19 @@
     <string name="pictogram_display_mode">Affichage :</string>
     <string name="pictogram_mode_all">Carte &amp; Nav</string>
     <string name="pictogram_mode_map_only">Carte seule</string>
+    <string name="pictogram_mode_map">Carte</string>
+    <string name="pictogram_mode_nav">Nav</string>
     <string name="camera_detour_chip_total">Évitement total</string>
     <string name="camera_detour_chip_moderate">Rues voisines</string>
     <string name="camera_detour_chip_disabled">Sans détour</string>
     <string name="camera_detour_mode_title">Contournement :</string>
+    <string name="settings_map_icon_food">Restaurants &amp; Cafés</string>
+    <string name="settings_map_icon_shop">Magasins &amp; Commerces</string>
+    <string name="settings_map_icon_sport">Salles de sport &amp; Fitness</string>
+    <string name="settings_map_icon_edu">Écoles &amp; Universités</string>
+    <string name="settings_map_icon_health">Santé &amp; Pharmacies</string>
+    <string name="settings_map_icon_lodging">Hôtels &amp; Hébergement</string>
+    <string name="settings_map_icon_culture">Culture &amp; Loisirs</string>
+    <string name="settings_map_icon_civic">Services publics &amp; Citoyen</string>
+    <string name="settings_map_icon_park">Parcs &amp; Espaces verts</string>
 </resources>

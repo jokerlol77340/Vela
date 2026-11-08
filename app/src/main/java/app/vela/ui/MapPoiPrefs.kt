@@ -42,6 +42,16 @@ object MapPoiPrefs {
     val parkingScale = mutableFloatStateOf(1.0f)
     val savedPinScale = mutableFloatStateOf(1.0f)
 
+    val foodScale = mutableFloatStateOf(1.0f)
+    val shopScale = mutableFloatStateOf(1.0f)
+    val sportScale = mutableFloatStateOf(1.0f)
+    val eduScale = mutableFloatStateOf(1.0f)
+    val healthScale = mutableFloatStateOf(1.0f)
+    val lodgingScale = mutableFloatStateOf(1.0f)
+    val cultureScale = mutableFloatStateOf(1.0f)
+    val civicScale = mutableFloatStateOf(1.0f)
+    val parkScale = mutableFloatStateOf(1.0f)
+
     /** Min zoom levels per pictogram (0f = default system zoom floor). */
     val speedcamMinZoom = mutableFloatStateOf(0f)
     val flockMinZoom = mutableFloatStateOf(0f)
@@ -58,7 +68,42 @@ object MapPoiPrefs {
     val parkingMinZoom = mutableFloatStateOf(0f)
     val savedPinMinZoom = mutableFloatStateOf(0f)
 
-    /** Display mode per pictogram: true = Carte & Navigation, false = Carte uniquement. */
+    val foodMinZoom = mutableFloatStateOf(0f)
+    val shopMinZoom = mutableFloatStateOf(0f)
+    val sportMinZoom = mutableFloatStateOf(0f)
+    val eduMinZoom = mutableFloatStateOf(0f)
+    val healthMinZoom = mutableFloatStateOf(0f)
+    val lodgingMinZoom = mutableFloatStateOf(0f)
+    val cultureMinZoom = mutableFloatStateOf(0f)
+    val civicMinZoom = mutableFloatStateOf(0f)
+    val parkMinZoom = mutableFloatStateOf(0f)
+
+    /** Display mode per pictogram: showInMap (Carte) and showInNav (Navigation). */
+    val speedcamShowInMap = mutableStateOf(true)
+    val flockShowInMap = mutableStateOf(true)
+    val surveillanceCamShowInMap = mutableStateOf(true)
+    val signalShowInMap = mutableStateOf(true)
+    val stopSignShowInMap = mutableStateOf(true)
+    val railCrossingShowInMap = mutableStateOf(true)
+    val speedHumpShowInMap = mutableStateOf(true)
+    val roadShieldShowInMap = mutableStateOf(true)
+    val exitNumberShowInMap = mutableStateOf(true)
+    val fuelStationShowInMap = mutableStateOf(true)
+    val transitStopShowInMap = mutableStateOf(true)
+    val poiPlaceShowInMap = mutableStateOf(true)
+    val parkingShowInMap = mutableStateOf(true)
+    val savedPinShowInMap = mutableStateOf(true)
+
+    val foodShowInMap = mutableStateOf(true)
+    val shopShowInMap = mutableStateOf(true)
+    val sportShowInMap = mutableStateOf(true)
+    val eduShowInMap = mutableStateOf(true)
+    val healthShowInMap = mutableStateOf(true)
+    val lodgingShowInMap = mutableStateOf(true)
+    val cultureShowInMap = mutableStateOf(true)
+    val civicShowInMap = mutableStateOf(true)
+    val parkShowInMap = mutableStateOf(true)
+
     val speedcamShowInNav = mutableStateOf(true)
     val flockShowInNav = mutableStateOf(true)
     val surveillanceCamShowInNav = mutableStateOf(true)
@@ -73,6 +118,16 @@ object MapPoiPrefs {
     val poiPlaceShowInNav = mutableStateOf(false)
     val parkingShowInNav = mutableStateOf(true)
     val savedPinShowInNav = mutableStateOf(true)
+
+    val foodShowInNav = mutableStateOf(false)
+    val shopShowInNav = mutableStateOf(false)
+    val sportShowInNav = mutableStateOf(false)
+    val eduShowInNav = mutableStateOf(false)
+    val healthShowInNav = mutableStateOf(false)
+    val lodgingShowInNav = mutableStateOf(false)
+    val cultureShowInNav = mutableStateOf(false)
+    val civicShowInNav = mutableStateOf(false)
+    val parkShowInNav = mutableStateOf(false)
     /** Where the businesses on the browse map come from, one of [SOURCE_OPEN] (the Overture places
      *  layer where a region file covers the view, Google only on tap, works offline), [SOURCE_GOOGLE]
      *  (the ambient fan-out on every pan, nothing offline) or [SOURCE_BOTH] (the open layer draws the
@@ -130,6 +185,17 @@ object MapPoiPrefs {
         poiPlaceScale.floatValue = p.getFloat(KEY_POI_PLACE_SCALE, 1.0f)
         parkingScale.floatValue = p.getFloat(KEY_PARKING_SCALE, 1.0f)
         savedPinScale.floatValue = p.getFloat(KEY_SAVED_PIN_SCALE, 1.0f)
+
+        foodScale.floatValue = p.getFloat(KEY_FOOD_SCALE, 1.0f)
+        shopScale.floatValue = p.getFloat(KEY_SHOP_SCALE, 1.0f)
+        sportScale.floatValue = p.getFloat(KEY_SPORT_SCALE, 1.0f)
+        eduScale.floatValue = p.getFloat(KEY_EDU_SCALE, 1.0f)
+        healthScale.floatValue = p.getFloat(KEY_HEALTH_SCALE, 1.0f)
+        lodgingScale.floatValue = p.getFloat(KEY_LODGING_SCALE, 1.0f)
+        cultureScale.floatValue = p.getFloat(KEY_CULTURE_SCALE, 1.0f)
+        civicScale.floatValue = p.getFloat(KEY_CIVIC_SCALE, 1.0f)
+        parkScale.floatValue = p.getFloat(KEY_PARK_SCALE, 1.0f)
+
         speedcamMinZoom.floatValue = p.getFloat(KEY_SPEEDCAM_MIN_ZOOM, 0f)
         flockMinZoom.floatValue = p.getFloat(KEY_FLOCK_MIN_ZOOM, 0f)
         surveillanceCamMinZoom.floatValue = p.getFloat(KEY_SURV_CAM_MIN_ZOOM, 0f)
@@ -145,6 +211,41 @@ object MapPoiPrefs {
         parkingMinZoom.floatValue = p.getFloat(KEY_PARKING_MIN_ZOOM, 0f)
         savedPinMinZoom.floatValue = p.getFloat(KEY_SAVED_PIN_MIN_ZOOM, 0f)
 
+        foodMinZoom.floatValue = p.getFloat(KEY_FOOD_MIN_ZOOM, 0f)
+        shopMinZoom.floatValue = p.getFloat(KEY_SHOP_MIN_ZOOM, 0f)
+        sportMinZoom.floatValue = p.getFloat(KEY_SPORT_MIN_ZOOM, 0f)
+        eduMinZoom.floatValue = p.getFloat(KEY_EDU_MIN_ZOOM, 0f)
+        healthMinZoom.floatValue = p.getFloat(KEY_HEALTH_MIN_ZOOM, 0f)
+        lodgingMinZoom.floatValue = p.getFloat(KEY_LODGING_MIN_ZOOM, 0f)
+        cultureMinZoom.floatValue = p.getFloat(KEY_CULTURE_MIN_ZOOM, 0f)
+        civicMinZoom.floatValue = p.getFloat(KEY_CIVIC_MIN_ZOOM, 0f)
+        parkMinZoom.floatValue = p.getFloat(KEY_PARK_MIN_ZOOM, 0f)
+
+        speedcamShowInMap.value = p.getBoolean(KEY_SPEEDCAM_MAP, true)
+        flockShowInMap.value = p.getBoolean(KEY_FLOCK_MAP, true)
+        surveillanceCamShowInMap.value = p.getBoolean(KEY_SURV_CAM_MAP, true)
+        signalShowInMap.value = p.getBoolean(KEY_SIGNAL_MAP, true)
+        stopSignShowInMap.value = p.getBoolean(KEY_STOP_MAP, true)
+        railCrossingShowInMap.value = p.getBoolean(KEY_RAILX_MAP, true)
+        speedHumpShowInMap.value = p.getBoolean(KEY_HUMP_MAP, true)
+        roadShieldShowInMap.value = p.getBoolean(KEY_ROAD_SHIELD_MAP, true)
+        exitNumberShowInMap.value = p.getBoolean(KEY_EXIT_NUMBER_MAP, true)
+        fuelStationShowInMap.value = p.getBoolean(KEY_FUEL_STATION_MAP, true)
+        transitStopShowInMap.value = p.getBoolean(KEY_TRANSIT_STOP_MAP, true)
+        poiPlaceShowInMap.value = p.getBoolean(KEY_POI_PLACE_MAP, true)
+        parkingShowInMap.value = p.getBoolean(KEY_PARKING_MAP, true)
+        savedPinShowInMap.value = p.getBoolean(KEY_SAVED_PIN_MAP, true)
+
+        foodShowInMap.value = p.getBoolean(KEY_FOOD_MAP, true)
+        shopShowInMap.value = p.getBoolean(KEY_SHOP_MAP, true)
+        sportShowInMap.value = p.getBoolean(KEY_SPORT_MAP, true)
+        eduShowInMap.value = p.getBoolean(KEY_EDU_MAP, true)
+        healthShowInMap.value = p.getBoolean(KEY_HEALTH_MAP, true)
+        lodgingShowInMap.value = p.getBoolean(KEY_LODGING_MAP, true)
+        cultureShowInMap.value = p.getBoolean(KEY_CULTURE_MAP, true)
+        civicShowInMap.value = p.getBoolean(KEY_CIVIC_MAP, true)
+        parkShowInMap.value = p.getBoolean(KEY_PARK_MAP, true)
+
         speedcamShowInNav.value = p.getBoolean(KEY_SPEEDCAM_NAV, true)
         flockShowInNav.value = p.getBoolean(KEY_FLOCK_NAV, true)
         surveillanceCamShowInNav.value = p.getBoolean(KEY_SURV_CAM_NAV, true)
@@ -159,6 +260,16 @@ object MapPoiPrefs {
         poiPlaceShowInNav.value = p.getBoolean(KEY_POI_PLACE_NAV, false)
         parkingShowInNav.value = p.getBoolean(KEY_PARKING_NAV, true)
         savedPinShowInNav.value = p.getBoolean(KEY_SAVED_PIN_NAV, true)
+
+        foodShowInNav.value = p.getBoolean(KEY_FOOD_NAV, false)
+        shopShowInNav.value = p.getBoolean(KEY_SHOP_NAV, false)
+        sportShowInNav.value = p.getBoolean(KEY_SPORT_NAV, false)
+        eduShowInNav.value = p.getBoolean(KEY_EDU_NAV, false)
+        healthShowInNav.value = p.getBoolean(KEY_HEALTH_NAV, false)
+        lodgingShowInNav.value = p.getBoolean(KEY_LODGING_NAV, false)
+        cultureShowInNav.value = p.getBoolean(KEY_CULTURE_NAV, false)
+        civicShowInNav.value = p.getBoolean(KEY_CIVIC_NAV, false)
+        parkShowInNav.value = p.getBoolean(KEY_PARK_NAV, false)
         explicitSource = p.getString(KEY_PLACES_SOURCE, null)
         placesSource.value = explicitSource ?: remoteDefault
         placesWithDownloads.value = p.getBoolean(KEY_PLACES_WITH_DOWNLOADS, true)
@@ -405,6 +516,61 @@ object MapPoiPrefs {
         prefs(context).edit().putFloat(KEY_SAVED_PIN_MIN_ZOOM, value).apply()
     }
 
+    fun setFoodScale(context: Context, value: Float) { foodScale.floatValue = value; prefs(context).edit().putFloat(KEY_FOOD_SCALE, value).apply() }
+    fun setShopScale(context: Context, value: Float) { shopScale.floatValue = value; prefs(context).edit().putFloat(KEY_SHOP_SCALE, value).apply() }
+    fun setSportScale(context: Context, value: Float) { sportScale.floatValue = value; prefs(context).edit().putFloat(KEY_SPORT_SCALE, value).apply() }
+    fun setEduScale(context: Context, value: Float) { eduScale.floatValue = value; prefs(context).edit().putFloat(KEY_EDU_SCALE, value).apply() }
+    fun setHealthScale(context: Context, value: Float) { healthScale.floatValue = value; prefs(context).edit().putFloat(KEY_HEALTH_SCALE, value).apply() }
+    fun setLodgingScale(context: Context, value: Float) { lodgingScale.floatValue = value; prefs(context).edit().putFloat(KEY_LODGING_SCALE, value).apply() }
+    fun setCultureScale(context: Context, value: Float) { cultureScale.floatValue = value; prefs(context).edit().putFloat(KEY_CULTURE_SCALE, value).apply() }
+    fun setCivicScale(context: Context, value: Float) { civicScale.floatValue = value; prefs(context).edit().putFloat(KEY_CIVIC_SCALE, value).apply() }
+    fun setParkScale(context: Context, value: Float) { parkScale.floatValue = value; prefs(context).edit().putFloat(KEY_PARK_SCALE, value).apply() }
+
+    fun setFoodMinZoom(context: Context, value: Float) { foodMinZoom.floatValue = value; prefs(context).edit().putFloat(KEY_FOOD_MIN_ZOOM, value).apply() }
+    fun setShopMinZoom(context: Context, value: Float) { shopMinZoom.floatValue = value; prefs(context).edit().putFloat(KEY_SHOP_MIN_ZOOM, value).apply() }
+    fun setSportMinZoom(context: Context, value: Float) { sportMinZoom.floatValue = value; prefs(context).edit().putFloat(KEY_SPORT_MIN_ZOOM, value).apply() }
+    fun setEduMinZoom(context: Context, value: Float) { eduMinZoom.floatValue = value; prefs(context).edit().putFloat(KEY_EDU_MIN_ZOOM, value).apply() }
+    fun setHealthMinZoom(context: Context, value: Float) { healthMinZoom.floatValue = value; prefs(context).edit().putFloat(KEY_HEALTH_MIN_ZOOM, value).apply() }
+    fun setLodgingMinZoom(context: Context, value: Float) { lodgingMinZoom.floatValue = value; prefs(context).edit().putFloat(KEY_LODGING_MIN_ZOOM, value).apply() }
+    fun setCultureMinZoom(context: Context, value: Float) { cultureMinZoom.floatValue = value; prefs(context).edit().putFloat(KEY_CULTURE_MIN_ZOOM, value).apply() }
+    fun setCivicMinZoom(context: Context, value: Float) { civicMinZoom.floatValue = value; prefs(context).edit().putFloat(KEY_CIVIC_MIN_ZOOM, value).apply() }
+    fun setParkMinZoom(context: Context, value: Float) { parkMinZoom.floatValue = value; prefs(context).edit().putFloat(KEY_PARK_MIN_ZOOM, value).apply() }
+
+    fun setSpeedcamShowInMap(context: Context, value: Boolean) { speedcamShowInMap.value = value; prefs(context).edit().putBoolean(KEY_SPEEDCAM_MAP, value).apply() }
+    fun setFlockShowInMap(context: Context, value: Boolean) { flockShowInMap.value = value; prefs(context).edit().putBoolean(KEY_FLOCK_MAP, value).apply() }
+    fun setSurveillanceCamShowInMap(context: Context, value: Boolean) { surveillanceCamShowInMap.value = value; prefs(context).edit().putBoolean(KEY_SURV_CAM_MAP, value).apply() }
+    fun setSignalShowInMap(context: Context, value: Boolean) { signalShowInMap.value = value; prefs(context).edit().putBoolean(KEY_SIGNAL_MAP, value).apply() }
+    fun setStopSignShowInMap(context: Context, value: Boolean) { stopSignShowInMap.value = value; prefs(context).edit().putBoolean(KEY_STOP_MAP, value).apply() }
+    fun setRailCrossingShowInMap(context: Context, value: Boolean) { railCrossingShowInMap.value = value; prefs(context).edit().putBoolean(KEY_RAILX_MAP, value).apply() }
+    fun setSpeedHumpShowInMap(context: Context, value: Boolean) { speedHumpShowInMap.value = value; prefs(context).edit().putBoolean(KEY_HUMP_MAP, value).apply() }
+    fun setRoadShieldShowInMap(context: Context, value: Boolean) { roadShieldShowInMap.value = value; prefs(context).edit().putBoolean(KEY_ROAD_SHIELD_MAP, value).apply() }
+    fun setExitNumberShowInMap(context: Context, value: Boolean) { exitNumberShowInMap.value = value; prefs(context).edit().putBoolean(KEY_EXIT_NUMBER_MAP, value).apply() }
+    fun setFuelStationShowInMap(context: Context, value: Boolean) { fuelStationShowInMap.value = value; prefs(context).edit().putBoolean(KEY_FUEL_STATION_MAP, value).apply() }
+    fun setTransitStopShowInMap(context: Context, value: Boolean) { transitStopShowInMap.value = value; prefs(context).edit().putBoolean(KEY_TRANSIT_STOP_MAP, value).apply() }
+    fun setPoiPlaceShowInMap(context: Context, value: Boolean) { poiPlaceShowInMap.value = value; prefs(context).edit().putBoolean(KEY_POI_PLACE_MAP, value).apply() }
+    fun setParkingShowInMap(context: Context, value: Boolean) { parkingShowInMap.value = value; prefs(context).edit().putBoolean(KEY_PARKING_MAP, value).apply() }
+    fun setSavedPinShowInMap(context: Context, value: Boolean) { savedPinShowInMap.value = value; prefs(context).edit().putBoolean(KEY_SAVED_PIN_MAP, value).apply() }
+
+    fun setFoodShowInMap(context: Context, value: Boolean) { foodShowInMap.value = value; prefs(context).edit().putBoolean(KEY_FOOD_MAP, value).apply() }
+    fun setShopShowInMap(context: Context, value: Boolean) { shopShowInMap.value = value; prefs(context).edit().putBoolean(KEY_SHOP_MAP, value).apply() }
+    fun setSportShowInMap(context: Context, value: Boolean) { sportShowInMap.value = value; prefs(context).edit().putBoolean(KEY_SPORT_MAP, value).apply() }
+    fun setEduShowInMap(context: Context, value: Boolean) { eduShowInMap.value = value; prefs(context).edit().putBoolean(KEY_EDU_MAP, value).apply() }
+    fun setHealthShowInMap(context: Context, value: Boolean) { healthShowInMap.value = value; prefs(context).edit().putBoolean(KEY_HEALTH_MAP, value).apply() }
+    fun setLodgingShowInMap(context: Context, value: Boolean) { lodgingShowInMap.value = value; prefs(context).edit().putBoolean(KEY_LODGING_MAP, value).apply() }
+    fun setCultureShowInMap(context: Context, value: Boolean) { cultureShowInMap.value = value; prefs(context).edit().putBoolean(KEY_CULTURE_MAP, value).apply() }
+    fun setCivicShowInMap(context: Context, value: Boolean) { civicShowInMap.value = value; prefs(context).edit().putBoolean(KEY_CIVIC_MAP, value).apply() }
+    fun setParkShowInMap(context: Context, value: Boolean) { parkShowInMap.value = value; prefs(context).edit().putBoolean(KEY_PARK_MAP, value).apply() }
+
+    fun setFoodShowInNav(context: Context, value: Boolean) { foodShowInNav.value = value; prefs(context).edit().putBoolean(KEY_FOOD_NAV, value).apply() }
+    fun setShopShowInNav(context: Context, value: Boolean) { shopShowInNav.value = value; prefs(context).edit().putBoolean(KEY_SHOP_NAV, value).apply() }
+    fun setSportShowInNav(context: Context, value: Boolean) { sportShowInNav.value = value; prefs(context).edit().putBoolean(KEY_SPORT_NAV, value).apply() }
+    fun setEduShowInNav(context: Context, value: Boolean) { eduShowInNav.value = value; prefs(context).edit().putBoolean(KEY_EDU_NAV, value).apply() }
+    fun setHealthShowInNav(context: Context, value: Boolean) { healthShowInNav.value = value; prefs(context).edit().putBoolean(KEY_HEALTH_NAV, value).apply() }
+    fun setLodgingShowInNav(context: Context, value: Boolean) { lodgingShowInNav.value = value; prefs(context).edit().putBoolean(KEY_LODGING_NAV, value).apply() }
+    fun setCultureShowInNav(context: Context, value: Boolean) { cultureShowInNav.value = value; prefs(context).edit().putBoolean(KEY_CULTURE_NAV, value).apply() }
+    fun setCivicShowInNav(context: Context, value: Boolean) { civicShowInNav.value = value; prefs(context).edit().putBoolean(KEY_CIVIC_NAV, value).apply() }
+    fun setParkShowInNav(context: Context, value: Boolean) { parkShowInNav.value = value; prefs(context).edit().putBoolean(KEY_PARK_NAV, value).apply() }
+
     fun setSpeedcamShowInNav(context: Context, value: Boolean) {
         speedcamShowInNav.value = value
         prefs(context).edit().putBoolean(KEY_SPEEDCAM_NAV, value).apply()
@@ -494,6 +660,15 @@ object MapPoiPrefs {
     private const val KEY_POI_PLACE_SCALE = "map_icon_poi_place_scale"
     private const val KEY_PARKING_SCALE = "map_icon_parking_scale"
     private const val KEY_SAVED_PIN_SCALE = "map_icon_saved_pin_scale"
+    private const val KEY_FOOD_SCALE = "map_icon_food_scale"
+    private const val KEY_SHOP_SCALE = "map_icon_shop_scale"
+    private const val KEY_SPORT_SCALE = "map_icon_sport_scale"
+    private const val KEY_EDU_SCALE = "map_icon_edu_scale"
+    private const val KEY_HEALTH_SCALE = "map_icon_health_scale"
+    private const val KEY_LODGING_SCALE = "map_icon_lodging_scale"
+    private const val KEY_CULTURE_SCALE = "map_icon_culture_scale"
+    private const val KEY_CIVIC_SCALE = "map_icon_civic_scale"
+    private const val KEY_PARK_SCALE = "map_icon_park_scale"
 
     private const val KEY_SPEEDCAM_MIN_ZOOM = "map_nav_speedcam_min_zoom"
     private const val KEY_FLOCK_MIN_ZOOM = "map_nav_flock_min_zoom"
@@ -509,6 +684,39 @@ object MapPoiPrefs {
     private const val KEY_POI_PLACE_MIN_ZOOM = "map_icon_poi_place_min_zoom"
     private const val KEY_PARKING_MIN_ZOOM = "map_icon_parking_min_zoom"
     private const val KEY_SAVED_PIN_MIN_ZOOM = "map_icon_saved_pin_min_zoom"
+    private const val KEY_FOOD_MIN_ZOOM = "map_icon_food_min_zoom"
+    private const val KEY_SHOP_MIN_ZOOM = "map_icon_shop_min_zoom"
+    private const val KEY_SPORT_MIN_ZOOM = "map_icon_sport_min_zoom"
+    private const val KEY_EDU_MIN_ZOOM = "map_icon_edu_min_zoom"
+    private const val KEY_HEALTH_MIN_ZOOM = "map_icon_health_min_zoom"
+    private const val KEY_LODGING_MIN_ZOOM = "map_icon_lodging_min_zoom"
+    private const val KEY_CULTURE_MIN_ZOOM = "map_icon_culture_min_zoom"
+    private const val KEY_CIVIC_MIN_ZOOM = "map_icon_civic_min_zoom"
+    private const val KEY_PARK_MIN_ZOOM = "map_icon_park_min_zoom"
+
+    private const val KEY_SPEEDCAM_MAP = "map_nav_speedcam_show_map"
+    private const val KEY_FLOCK_MAP = "map_nav_flock_show_map"
+    private const val KEY_SURV_CAM_MAP = "map_nav_surv_cam_show_map"
+    private const val KEY_SIGNAL_MAP = "map_nav_signal_show_map"
+    private const val KEY_STOP_MAP = "map_nav_stop_show_map"
+    private const val KEY_RAILX_MAP = "map_nav_railx_show_map"
+    private const val KEY_HUMP_MAP = "map_nav_hump_show_map"
+    private const val KEY_ROAD_SHIELD_MAP = "map_icon_road_shield_show_map"
+    private const val KEY_EXIT_NUMBER_MAP = "map_icon_exit_number_show_map"
+    private const val KEY_FUEL_STATION_MAP = "map_icon_fuel_station_show_map"
+    private const val KEY_TRANSIT_STOP_MAP = "map_icon_transit_stop_show_map"
+    private const val KEY_POI_PLACE_MAP = "map_icon_poi_place_show_map"
+    private const val KEY_PARKING_MAP = "map_icon_parking_show_map"
+    private const val KEY_SAVED_PIN_MAP = "map_icon_saved_pin_show_map"
+    private const val KEY_FOOD_MAP = "map_icon_food_show_map"
+    private const val KEY_SHOP_MAP = "map_icon_shop_show_map"
+    private const val KEY_SPORT_MAP = "map_icon_sport_show_map"
+    private const val KEY_EDU_MAP = "map_icon_edu_show_map"
+    private const val KEY_HEALTH_MAP = "map_icon_health_show_map"
+    private const val KEY_LODGING_MAP = "map_icon_lodging_show_map"
+    private const val KEY_CULTURE_MAP = "map_icon_culture_show_map"
+    private const val KEY_CIVIC_MAP = "map_icon_civic_show_map"
+    private const val KEY_PARK_MAP = "map_icon_park_show_map"
 
     private const val KEY_SPEEDCAM_NAV = "map_nav_speedcam_show_nav"
     private const val KEY_FLOCK_NAV = "map_nav_flock_show_nav"
@@ -524,6 +732,15 @@ object MapPoiPrefs {
     private const val KEY_POI_PLACE_NAV = "map_icon_poi_place_show_nav"
     private const val KEY_PARKING_NAV = "map_icon_parking_show_nav"
     private const val KEY_SAVED_PIN_NAV = "map_icon_saved_pin_show_nav"
+    private const val KEY_FOOD_NAV = "map_icon_food_show_nav"
+    private const val KEY_SHOP_NAV = "map_icon_shop_show_nav"
+    private const val KEY_SPORT_NAV = "map_icon_sport_show_nav"
+    private const val KEY_EDU_NAV = "map_icon_edu_show_nav"
+    private const val KEY_HEALTH_NAV = "map_icon_health_show_nav"
+    private const val KEY_LODGING_NAV = "map_icon_lodging_show_nav"
+    private const val KEY_CULTURE_NAV = "map_icon_culture_show_nav"
+    private const val KEY_CIVIC_NAV = "map_icon_civic_show_nav"
+    private const val KEY_PARK_NAV = "map_icon_park_show_nav"
     private const val KEY_PLACES_SOURCE = "map_places_source"
     private const val KEY_PLACES_WITH_DOWNLOADS = "offline_places_with_downloads"
     private const val KEY_LOOKUP_TAPPED = "map_places_google_lookup"

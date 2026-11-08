@@ -52,6 +52,8 @@ private data class PictogramRow(
     val onScaleChange: (Float) -> Unit,
     val currentMinZoom: Float = 0f,
     val onMinZoomChange: (Float) -> Unit = {},
+    val showInMap: Boolean = true,
+    val onShowInMapChange: (Boolean) -> Unit = {},
     val showInNav: Boolean = true,
     val onShowInNavChange: (Boolean) -> Unit = {},
 )
@@ -337,6 +339,8 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.MapPoiPrefs.setSpeedcamScale(context, it) },
                 app.vela.ui.MapPoiPrefs.speedcamMinZoom.floatValue,
                 { app.vela.ui.MapPoiPrefs.setSpeedcamMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.speedcamShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setSpeedcamShowInMap(context, it) },
                 app.vela.ui.MapPoiPrefs.speedcamShowInNav.value,
                 { app.vela.ui.MapPoiPrefs.setSpeedcamShowInNav(context, it) },
             ),
@@ -347,6 +351,8 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.MapPoiPrefs.setFlockScale(context, it) },
                 app.vela.ui.MapPoiPrefs.flockMinZoom.floatValue,
                 { app.vela.ui.MapPoiPrefs.setFlockMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.flockShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setFlockShowInMap(context, it) },
                 app.vela.ui.MapPoiPrefs.flockShowInNav.value,
                 { app.vela.ui.MapPoiPrefs.setFlockShowInNav(context, it) },
             ),
@@ -357,6 +363,8 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.MapPoiPrefs.setSurveillanceCamScale(context, it) },
                 app.vela.ui.MapPoiPrefs.surveillanceCamMinZoom.floatValue,
                 { app.vela.ui.MapPoiPrefs.setSurveillanceCamMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.surveillanceCamShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setSurveillanceCamShowInMap(context, it) },
                 app.vela.ui.MapPoiPrefs.surveillanceCamShowInNav.value,
                 { app.vela.ui.MapPoiPrefs.setSurveillanceCamShowInNav(context, it) },
             ),
@@ -367,6 +375,8 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.WazeAlertsPref.setWazeIconScale(context, it) },
                 app.vela.ui.WazeAlertsPref.wazeMinZoom.floatValue,
                 { app.vela.ui.WazeAlertsPref.setWazeMinZoom(context, it) },
+                app.vela.ui.WazeAlertsPref.wazeShowInMap.value,
+                { app.vela.ui.WazeAlertsPref.setWazeShowInMap(context, it) },
                 app.vela.ui.WazeAlertsPref.wazeShowInNav.value,
                 { app.vela.ui.WazeAlertsPref.setWazeShowInNav(context, it) },
             ),
@@ -377,6 +387,8 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.MapPoiPrefs.setSignalScale(context, it) },
                 app.vela.ui.MapPoiPrefs.signalMinZoom.floatValue,
                 { app.vela.ui.MapPoiPrefs.setSignalMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.signalShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setSignalShowInMap(context, it) },
                 app.vela.ui.MapPoiPrefs.signalShowInNav.value,
                 { app.vela.ui.MapPoiPrefs.setSignalShowInNav(context, it) },
             ),
@@ -387,6 +399,8 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.MapPoiPrefs.setStopSignScale(context, it) },
                 app.vela.ui.MapPoiPrefs.stopSignMinZoom.floatValue,
                 { app.vela.ui.MapPoiPrefs.setStopSignMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.stopSignShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setStopSignShowInMap(context, it) },
                 app.vela.ui.MapPoiPrefs.stopSignShowInNav.value,
                 { app.vela.ui.MapPoiPrefs.setStopSignShowInNav(context, it) },
             ),
@@ -397,6 +411,8 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.MapPoiPrefs.setRailCrossingScale(context, it) },
                 app.vela.ui.MapPoiPrefs.railCrossingMinZoom.floatValue,
                 { app.vela.ui.MapPoiPrefs.setRailCrossingMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.railCrossingShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setRailCrossingShowInMap(context, it) },
                 app.vela.ui.MapPoiPrefs.railCrossingShowInNav.value,
                 { app.vela.ui.MapPoiPrefs.setRailCrossingShowInNav(context, it) },
             ),
@@ -407,6 +423,8 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.MapPoiPrefs.setSpeedHumpScale(context, it) },
                 app.vela.ui.MapPoiPrefs.speedHumpMinZoom.floatValue,
                 { app.vela.ui.MapPoiPrefs.setSpeedHumpMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.speedHumpShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setSpeedHumpShowInMap(context, it) },
                 app.vela.ui.MapPoiPrefs.speedHumpShowInNav.value,
                 { app.vela.ui.MapPoiPrefs.setSpeedHumpShowInNav(context, it) },
             ),
@@ -429,12 +447,17 @@ private fun AppearanceIconsTab(context: Context) {
         val transitBmp = remember { app.vela.ui.map.transitStopBitmap() }
         val parkingBmp = remember { app.vela.ui.map.parkingBitmap() }
         val pinBmp = remember { app.vela.ui.map.pinBitmap() }
-        val fuelBmp = remember {
-            app.vela.ui.map.PoiIcons.groupMarker(context, "fuel") ?: pinBmp
-        }
-        val poiBmp = remember {
-            app.vela.ui.map.PoiIcons.groupMarker(context, "food") ?: pinBmp
-        }
+        val fuelBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "fuel") ?: pinBmp }
+        val foodBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "food") ?: pinBmp }
+        val shopBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "shop") ?: pinBmp }
+        val sportBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "sport") ?: pinBmp }
+        val eduBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "edu") ?: pinBmp }
+        val healthBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "health") ?: pinBmp }
+        val lodgingBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "lodging") ?: pinBmp }
+        val cultureBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "culture") ?: pinBmp }
+        val civicBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "civic") ?: pinBmp }
+        val parkBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "park") ?: pinBmp }
+        val poiBmp = remember { app.vela.ui.map.PoiIcons.groupMarker(context, "default") ?: pinBmp }
 
         val mapRows = listOf(
             PictogramRow(
@@ -444,6 +467,8 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.MapPoiPrefs.setRoadShieldScale(context, it) },
                 app.vela.ui.MapPoiPrefs.roadShieldMinZoom.floatValue,
                 { app.vela.ui.MapPoiPrefs.setRoadShieldMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.roadShieldShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setRoadShieldShowInMap(context, it) },
                 app.vela.ui.MapPoiPrefs.roadShieldShowInNav.value,
                 { app.vela.ui.MapPoiPrefs.setRoadShieldShowInNav(context, it) },
             ),
@@ -454,6 +479,8 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.MapPoiPrefs.setExitNumberScale(context, it) },
                 app.vela.ui.MapPoiPrefs.exitNumberMinZoom.floatValue,
                 { app.vela.ui.MapPoiPrefs.setExitNumberMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.exitNumberShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setExitNumberShowInMap(context, it) },
                 app.vela.ui.MapPoiPrefs.exitNumberShowInNav.value,
                 { app.vela.ui.MapPoiPrefs.setExitNumberShowInNav(context, it) },
             ),
@@ -464,8 +491,130 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.MapPoiPrefs.setFuelStationScale(context, it) },
                 app.vela.ui.MapPoiPrefs.fuelStationMinZoom.floatValue,
                 { app.vela.ui.MapPoiPrefs.setFuelStationMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.fuelStationShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setFuelStationShowInMap(context, it) },
                 app.vela.ui.MapPoiPrefs.fuelStationShowInNav.value,
                 { app.vela.ui.MapPoiPrefs.setFuelStationShowInNav(context, it) },
+            ),
+            PictogramRow(
+                R.string.settings_map_icon_parking,
+                parkingBmp,
+                app.vela.ui.MapPoiPrefs.parkingScale.floatValue,
+                { app.vela.ui.MapPoiPrefs.setParkingScale(context, it) },
+                app.vela.ui.MapPoiPrefs.parkingMinZoom.floatValue,
+                { app.vela.ui.MapPoiPrefs.setParkingMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.parkingShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setParkingShowInMap(context, it) },
+                app.vela.ui.MapPoiPrefs.parkingShowInNav.value,
+                { app.vela.ui.MapPoiPrefs.setParkingShowInNav(context, it) },
+            ),
+            PictogramRow(
+                R.string.settings_map_icon_food,
+                foodBmp,
+                app.vela.ui.MapPoiPrefs.foodScale.floatValue,
+                { app.vela.ui.MapPoiPrefs.setFoodScale(context, it) },
+                app.vela.ui.MapPoiPrefs.foodMinZoom.floatValue,
+                { app.vela.ui.MapPoiPrefs.setFoodMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.foodShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setFoodShowInMap(context, it) },
+                app.vela.ui.MapPoiPrefs.foodShowInNav.value,
+                { app.vela.ui.MapPoiPrefs.setFoodShowInNav(context, it) },
+            ),
+            PictogramRow(
+                R.string.settings_map_icon_shop,
+                shopBmp,
+                app.vela.ui.MapPoiPrefs.shopScale.floatValue,
+                { app.vela.ui.MapPoiPrefs.setShopScale(context, it) },
+                app.vela.ui.MapPoiPrefs.shopMinZoom.floatValue,
+                { app.vela.ui.MapPoiPrefs.setShopMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.shopShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setShopShowInMap(context, it) },
+                app.vela.ui.MapPoiPrefs.shopShowInNav.value,
+                { app.vela.ui.MapPoiPrefs.setShopShowInNav(context, it) },
+            ),
+            PictogramRow(
+                R.string.settings_map_icon_sport,
+                sportBmp,
+                app.vela.ui.MapPoiPrefs.sportScale.floatValue,
+                { app.vela.ui.MapPoiPrefs.setSportScale(context, it) },
+                app.vela.ui.MapPoiPrefs.sportMinZoom.floatValue,
+                { app.vela.ui.MapPoiPrefs.setSportMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.sportShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setSportShowInMap(context, it) },
+                app.vela.ui.MapPoiPrefs.sportShowInNav.value,
+                { app.vela.ui.MapPoiPrefs.setSportShowInNav(context, it) },
+            ),
+            PictogramRow(
+                R.string.settings_map_icon_edu,
+                eduBmp,
+                app.vela.ui.MapPoiPrefs.eduScale.floatValue,
+                { app.vela.ui.MapPoiPrefs.setEduScale(context, it) },
+                app.vela.ui.MapPoiPrefs.eduMinZoom.floatValue,
+                { app.vela.ui.MapPoiPrefs.setEduMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.eduShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setEduShowInMap(context, it) },
+                app.vela.ui.MapPoiPrefs.eduShowInNav.value,
+                { app.vela.ui.MapPoiPrefs.setEduShowInNav(context, it) },
+            ),
+            PictogramRow(
+                R.string.settings_map_icon_health,
+                healthBmp,
+                app.vela.ui.MapPoiPrefs.healthScale.floatValue,
+                { app.vela.ui.MapPoiPrefs.setHealthScale(context, it) },
+                app.vela.ui.MapPoiPrefs.healthMinZoom.floatValue,
+                { app.vela.ui.MapPoiPrefs.setHealthMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.healthShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setHealthShowInMap(context, it) },
+                app.vela.ui.MapPoiPrefs.healthShowInNav.value,
+                { app.vela.ui.MapPoiPrefs.setHealthShowInNav(context, it) },
+            ),
+            PictogramRow(
+                R.string.settings_map_icon_lodging,
+                lodgingBmp,
+                app.vela.ui.MapPoiPrefs.lodgingScale.floatValue,
+                { app.vela.ui.MapPoiPrefs.setLodgingScale(context, it) },
+                app.vela.ui.MapPoiPrefs.lodgingMinZoom.floatValue,
+                { app.vela.ui.MapPoiPrefs.setLodgingMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.lodgingShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setLodgingShowInMap(context, it) },
+                app.vela.ui.MapPoiPrefs.lodgingShowInNav.value,
+                { app.vela.ui.MapPoiPrefs.setLodgingShowInNav(context, it) },
+            ),
+            PictogramRow(
+                R.string.settings_map_icon_culture,
+                cultureBmp,
+                app.vela.ui.MapPoiPrefs.cultureScale.floatValue,
+                { app.vela.ui.MapPoiPrefs.setCultureScale(context, it) },
+                app.vela.ui.MapPoiPrefs.cultureMinZoom.floatValue,
+                { app.vela.ui.MapPoiPrefs.setCultureMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.cultureShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setCultureShowInMap(context, it) },
+                app.vela.ui.MapPoiPrefs.cultureShowInNav.value,
+                { app.vela.ui.MapPoiPrefs.setCultureShowInNav(context, it) },
+            ),
+            PictogramRow(
+                R.string.settings_map_icon_civic,
+                civicBmp,
+                app.vela.ui.MapPoiPrefs.civicScale.floatValue,
+                { app.vela.ui.MapPoiPrefs.setCivicScale(context, it) },
+                app.vela.ui.MapPoiPrefs.civicMinZoom.floatValue,
+                { app.vela.ui.MapPoiPrefs.setCivicMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.civicShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setCivicShowInMap(context, it) },
+                app.vela.ui.MapPoiPrefs.civicShowInNav.value,
+                { app.vela.ui.MapPoiPrefs.setCivicShowInNav(context, it) },
+            ),
+            PictogramRow(
+                R.string.settings_map_icon_park,
+                parkBmp,
+                app.vela.ui.MapPoiPrefs.parkScale.floatValue,
+                { app.vela.ui.MapPoiPrefs.setParkScale(context, it) },
+                app.vela.ui.MapPoiPrefs.parkMinZoom.floatValue,
+                { app.vela.ui.MapPoiPrefs.setParkMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.parkShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setParkShowInMap(context, it) },
+                app.vela.ui.MapPoiPrefs.parkShowInNav.value,
+                { app.vela.ui.MapPoiPrefs.setParkShowInNav(context, it) },
             ),
             PictogramRow(
                 R.string.settings_map_icon_transit_stop,
@@ -474,6 +623,8 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.MapPoiPrefs.setTransitStopScale(context, it) },
                 app.vela.ui.MapPoiPrefs.transitStopMinZoom.floatValue,
                 { app.vela.ui.MapPoiPrefs.setTransitStopMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.transitStopShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setTransitStopShowInMap(context, it) },
                 app.vela.ui.MapPoiPrefs.transitStopShowInNav.value,
                 { app.vela.ui.MapPoiPrefs.setTransitStopShowInNav(context, it) },
             ),
@@ -484,18 +635,10 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.MapPoiPrefs.setPoiPlaceScale(context, it) },
                 app.vela.ui.MapPoiPrefs.poiPlaceMinZoom.floatValue,
                 { app.vela.ui.MapPoiPrefs.setPoiPlaceMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.poiPlaceShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setPoiPlaceShowInMap(context, it) },
                 app.vela.ui.MapPoiPrefs.poiPlaceShowInNav.value,
                 { app.vela.ui.MapPoiPrefs.setPoiPlaceShowInNav(context, it) },
-            ),
-            PictogramRow(
-                R.string.settings_map_icon_parking,
-                parkingBmp,
-                app.vela.ui.MapPoiPrefs.parkingScale.floatValue,
-                { app.vela.ui.MapPoiPrefs.setParkingScale(context, it) },
-                app.vela.ui.MapPoiPrefs.parkingMinZoom.floatValue,
-                { app.vela.ui.MapPoiPrefs.setParkingMinZoom(context, it) },
-                app.vela.ui.MapPoiPrefs.parkingShowInNav.value,
-                { app.vela.ui.MapPoiPrefs.setParkingShowInNav(context, it) },
             ),
             PictogramRow(
                 R.string.settings_map_icon_saved_pin,
@@ -504,6 +647,8 @@ private fun AppearanceIconsTab(context: Context) {
                 { app.vela.ui.MapPoiPrefs.setSavedPinScale(context, it) },
                 app.vela.ui.MapPoiPrefs.savedPinMinZoom.floatValue,
                 { app.vela.ui.MapPoiPrefs.setSavedPinMinZoom(context, it) },
+                app.vela.ui.MapPoiPrefs.savedPinShowInMap.value,
+                { app.vela.ui.MapPoiPrefs.setSavedPinShowInMap(context, it) },
                 app.vela.ui.MapPoiPrefs.savedPinShowInNav.value,
                 { app.vela.ui.MapPoiPrefs.setSavedPinShowInNav(context, it) },
             ),
@@ -595,7 +740,7 @@ private fun PictogramRowsList(
                         )
                     }
                 }
-                // 3. Display mode chips (Carte & Nav vs Carte seule)
+                // 3. Display mode chips (Carte & Nav as independent toggles)
                 androidx.compose.foundation.layout.Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
@@ -608,16 +753,16 @@ private fun PictogramRowsList(
                 }
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(
-                        selected = row.showInNav,
-                        onClick = { row.onShowInNavChange(true) },
-                        label = { Text(stringResource(R.string.pictogram_mode_all)) },
+                        selected = row.showInMap,
+                        onClick = { row.onShowInMapChange(!row.showInMap) },
+                        label = { Text(stringResource(R.string.pictogram_mode_map)) },
                         shape = androidx.compose.foundation.shape.CircleShape,
                         modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
                     )
                     FilterChip(
-                        selected = !row.showInNav,
-                        onClick = { row.onShowInNavChange(false) },
-                        label = { Text(stringResource(R.string.pictogram_mode_map_only)) },
+                        selected = row.showInNav,
+                        onClick = { row.onShowInNavChange(!row.showInNav) },
+                        label = { Text(stringResource(R.string.pictogram_mode_nav)) },
                         shape = androidx.compose.foundation.shape.CircleShape,
                         modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
                     )

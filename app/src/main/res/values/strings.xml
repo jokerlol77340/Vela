@@ -1643,8 +1643,19 @@
     <string name="pictogram_display_mode">Display:</string>
     <string name="pictogram_mode_all">Map &amp; Nav</string>
     <string name="pictogram_mode_map_only">Map only</string>
+    <string name="pictogram_mode_map">Map</string>
+    <string name="pictogram_mode_nav">Nav</string>
     <string name="camera_detour_chip_total">Total avoidance</string>
     <string name="camera_detour_chip_moderate">Side streets</string>
     <string name="camera_detour_chip_disabled">No detour</string>
     <string name="camera_detour_mode_title">Detour:</string>
+    <string name="settings_map_icon_food">Restaurants &amp; Cafes</string>
+    <string name="settings_map_icon_shop">Shops &amp; Retail</string>
+    <string name="settings_map_icon_sport">Gyms &amp; Sports</string>
+    <string name="settings_map_icon_edu">Schools &amp; Education</string>
+    <string name="settings_map_icon_health">Health &amp; Pharmacies</string>
+    <string name="settings_map_icon_lodging">Hotels &amp; Lodging</string>
+    <string name="settings_map_icon_culture">Culture &amp; Entertainment</string>
+    <string name="settings_map_icon_civic">Civic &amp; Public services</string>
+    <string name="settings_map_icon_park">Parks &amp; Green spaces</string>
 </resources>

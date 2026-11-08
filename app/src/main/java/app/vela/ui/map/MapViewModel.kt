@@ -8965,17 +8965,18 @@ class MapViewModel @Inject constructor(
             .take(ambientCap(zoom))
             .toList()
 
-        // Deduplicate fuel stations within 90m to avoid duplicate station icons
+        // Deduplicate fuel stations within 180m to avoid duplicate station icons
         val seenFuel = ArrayList<LatLng>()
         val deduped = ArrayList<app.vela.core.model.Place>(filtered.size)
         for (p in filtered) {
             val isFuel = p.fuelPrice != null ||
+                PoiIcons.groupFor(p.name, p.category) == "fuel" ||
                 p.placeType?.contains("GAS_STATION", ignoreCase = true) == true ||
                 p.category?.contains("fuel", ignoreCase = true) == true ||
                 p.category?.contains("gas", ignoreCase = true) == true ||
                 p.category?.contains("essence", ignoreCase = true) == true
             if (isFuel) {
-                val dup = seenFuel.any { prev -> prev.distanceTo(p.location) < 90.0 }
+                val dup = seenFuel.any { prev -> prev.distanceTo(p.location) < 180.0 }
                 if (dup) continue
                 seenFuel.add(p.location)
             }
@@ -9947,9 +9948,20 @@ class MapViewModel @Inject constructor(
             val merged = withContext(Dispatchers.Default) {
                 app.vela.data.BundledSpeedCameras.mergeAndDedupe(initial, bakedRoute, bakedBox, liveBox, liveRoute)
             }
+            val cap = 8_000
+            val keptSpeedCams = if (merged.size <= cap) merged else {
+                val step = merged.size.toDouble() / cap
+                val out = ArrayList<app.vela.core.data.SpeedCamera>(cap)
+                var i = 0.0
+                while (i < merged.size && out.size < cap) {
+                    out.add(merged[i.toInt()])
+                    i += step
+                }
+                out
+            }
             speedCamBox = doubleArrayOf(s, w, n, e)
-            diag.record("speedcam", "showing ${merged.size} camera(s) at z${"%.1f".format(zoom)}", "multi-source")
-            _state.update { it.copy(speedCameras = merged.take(800)) }
+            diag.record("speedcam", "showing ${keptSpeedCams.size} camera(s) at z${"%.1f".format(zoom)}", "multi-source")
+            _state.update { it.copy(speedCameras = keptSpeedCams) }
         }
     }
 
@@ -10331,17 +10343,18 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    /** Cap the drawn cameras to the [CONTROLS_ONSCREEN_CAP] NEAREST the box center (a dense metro cell can
-     *  hold hundreds; drawing them all clutters the map and costs tessellation). Shared by both the bundled
-     *  and the Overpass paths. */
+    /** Cap the drawn cameras uniformly across the viewport so large views (e.g. z8) don't drop outer regions. */
     private fun capFlock(res: List<app.vela.core.data.AlprCamera>, s: Double, n: Double, w: Double, e: Double): List<app.vela.core.data.AlprCamera> {
-        if (res.size <= CONTROLS_ONSCREEN_CAP) return res
-        val cLat0 = (s + n) / 2; val cLng0 = (w + e) / 2
-        val lngScale = kotlin.math.cos(Math.toRadians(cLat0))
-        return res.sortedBy {
-            val dLat = it.loc.lat - cLat0; val dLng = (it.loc.lng - cLng0) * lngScale
-            dLat * dLat + dLng * dLng
-        }.take(CONTROLS_ONSCREEN_CAP)
+        val cap = 12_000
+        if (res.size <= cap) return res
+        val step = res.size.toDouble() / cap
+        val out = ArrayList<app.vela.core.data.AlprCamera>(cap)
+        var i = 0.0
+        while (i < res.size && out.size < cap) {
+            out.add(res[i.toInt()])
+            i += step
+        }
+        return out
     }
 
     // --- Offline ROUTING graphs (Settings → Offline routing) ---------------------------------
