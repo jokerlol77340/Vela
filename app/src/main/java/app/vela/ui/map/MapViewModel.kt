@@ -6942,7 +6942,7 @@ class MapViewModel @Inject constructor(
                 val routesNow = _state.value.routes
                 val countsNow = _state.value.flockOnRoute
                 if (routesNow.size == countsNow.size && countsNow.any { it > 0 }) {
-                    val reqBudget = if (isTotalAvoidance) 24 else app.vela.core.nav.CameraDetour.MAX_REQUESTS
+                    val reqBudget = if (isTotalAvoidance) 32 else app.vela.core.nav.CameraDetour.MAX_REQUESTS
                     val budget = intArrayOf(reqBudget)
                     val tried = ArrayList<LatLng>()
                     val results = ArrayList<Pair<Route, Int>>()
@@ -7004,7 +7004,8 @@ class MapViewModel @Inject constructor(
     ): List<LatLng> {
         if (targets.isEmpty() || poly.size < 2) return emptyList()
         val bundledAlpr = if (app.vela.data.FlockCameras.isLoaded) app.vela.data.FlockCameras.along(poly) else emptyList()
-        val liveAlprOnPoly = liveAlprPool.filter {
+        val fullAlpr = (liveAlprPool + flockLoadedPool + _state.value.flockCameras).distinctBy { "${it.loc.lat},${it.loc.lng}" }
+        val liveAlprOnPoly = fullAlpr.filter {
             if (it.isAlpr) {
                 app.vela.core.nav.CameraFacing.onRoute(poly, it.loc, app.vela.core.nav.CameraFacing.parse(it.direction), 45.0)
             } else {
@@ -7017,7 +7018,8 @@ class MapViewModel @Inject constructor(
 
         val bundledSpeed = app.vela.data.BundledSpeedCameras.along(poly, 55.0)
         val bakedSpeed = app.vela.data.RoadFeatures.camerasAlong(poly, 55.0)
-        val liveSpeedOnPoly = liveSpeedPool.filter {
+        val fullSpeed = (liveSpeedPool + _state.value.speedCameras).distinctBy { "${it.loc.lat},${it.loc.lng}" }
+        val liveSpeedOnPoly = fullSpeed.filter {
             app.vela.core.data.OverpassAlprCameras.nearPolyline(it.loc, poly, 55.0)
         }
         val mergedSpeed = app.vela.data.BundledSpeedCameras.mergeAndDedupe(bundledSpeed, bakedSpeed, liveSpeedOnPoly).map { it.loc }
@@ -7040,8 +7042,8 @@ class MapViewModel @Inject constructor(
         var currentCount = routeCount
         var currentVias = emptyList<Pair<Double, LatLng>>()
         var requests = 0
-        val maxReqPerRoute = if (isTotalAvoidance) 16 else app.vela.core.nav.CameraDetour.MAX_REQUESTS_PER_ROUTE
-        val maxIters = if (isTotalAvoidance) 4 else 1
+        val maxReqPerRoute = if (isTotalAvoidance) 24 else app.vela.core.nav.CameraDetour.MAX_REQUESTS_PER_ROUTE
+        val maxIters = if (isTotalAvoidance) 3 else 1
 
         for (iter in 0 until maxIters) {
             if (currentCount <= 0 || requests >= maxReqPerRoute || budget[0] <= 0) break
@@ -7051,10 +7053,13 @@ class MapViewModel @Inject constructor(
                 val hits = camerasMatchingAvoidOnPoly(poly, mode, targets, liveAlprPool, liveSpeedPool)
                 if (hits.isEmpty()) return@withContext emptyList()
                 val along = hits.mapNotNull { loc -> app.vela.core.nav.RouteProjection.alongMeters(poly, cum, loc, 60.0) }
-                app.vela.core.nav.CameraDetour.untriedMulti(
-                    app.vela.core.nav.CameraDetour.candidatesMulti(poly, along, isTotalAvoidance, mode),
-                    tried
-                )
+                if (along.isEmpty()) return@withContext emptyList()
+                val rawCands = if (isTotalAvoidance) {
+                    app.vela.core.nav.CameraDetour.totalAvoidanceCandidates(origin, dest, poly, along, mode)
+                } else {
+                    app.vela.core.nav.CameraDetour.candidatesMulti(poly, along, isTotalAvoidance = false, mode = mode)
+                }
+                app.vela.core.nav.CameraDetour.untriedMulti(rawCands, tried)
             }
             if (cands.isEmpty()) break
             val stopAt = stops.map { app.vela.core.nav.RouteProjection.alongMeters(poly, cum, it, 250.0) to it }
@@ -7068,24 +7073,35 @@ class MapViewModel @Inject constructor(
                     val plan = app.vela.core.nav.CameraDetour.mergePlan(stopAt, trial)
                     requests++
                     budget[0]--
-                    val r = runCatching { dataSource.directions(origin, dest, mode, plan, avoidTolls, avoidHighways, avoidFerries) }
-                        .getOrDefault(emptyList()).firstOrNull() ?: continue
+                    val routesReturned = runCatching { dataSource.directions(origin, dest, mode, plan, avoidTolls, avoidHighways, avoidFerries) }
+                        .getOrDefault(emptyList())
                     if (routesEpoch != epoch) return null
-                    val n = withContext(Dispatchers.Default) {
-                        camerasMatchingAvoidOnPoly(r.polyline, mode, targets, liveAlprPool, liveSpeedPool).size
-                    }
-                    val extra = eta(r) - eta0
-                    if (isTotalAvoidance) {
-                        if (n == 0) {
-                            return r.copy(detourPlan = plan) to 0
+                    if (routesReturned.isEmpty()) continue
+
+                    for (r in routesReturned) {
+                        val n = withContext(Dispatchers.Default) {
+                            camerasMatchingAvoidOnPoly(r.polyline, mode, targets, liveAlprPool, liveSpeedPool).size
                         }
-                    } else {
-                        if (n < currentCount && extra <= cap) {
-                            currentVias = trial
-                            currentRoute = r.copy(detourPlan = plan)
-                            currentCount = n
-                            iterationImproved = true
-                            break@candLoop
+                        val extra = eta(r) - eta0
+                        if (isTotalAvoidance) {
+                            if (n == 0) {
+                                android.util.Log.i("VelaFlockRoute", "TOTAL AVOIDANCE: found 0-camera route via $via in $requests requests!")
+                                return r.copy(detourPlan = plan) to 0
+                            }
+                            if (n < currentCount) {
+                                currentVias = trial
+                                currentRoute = r.copy(detourPlan = plan)
+                                currentCount = n
+                                iterationImproved = true
+                            }
+                        } else {
+                            if (n < currentCount && extra <= cap) {
+                                currentVias = trial
+                                currentRoute = r.copy(detourPlan = plan)
+                                currentCount = n
+                                iterationImproved = true
+                                break@candLoop
+                            }
                         }
                     }
                 }

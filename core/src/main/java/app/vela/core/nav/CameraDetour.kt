@@ -141,6 +141,88 @@ object CameraDetour {
         }
     }
 
+    /**
+     * Wide detour candidates designed specifically for Total Avoidance.
+     * Looks far enough to find real, logical alternative corridors (parallel avenues,
+     * bypasses, grand contournements) that completely circumvent camera corridors.
+     */
+    fun totalAvoidanceCandidates(
+        origin: LatLng,
+        dest: LatLng,
+        poly: List<LatLng>,
+        cameraAlongM: List<Double>,
+        mode: TravelMode = TravelMode.DRIVE,
+    ): List<CandidateMulti> {
+        if (poly.size < 2 || cameraAlongM.isEmpty()) return emptyList()
+        val cum = RouteProjection.cumulative(poly)
+        val totalM = cum.lastOrNull() ?: return emptyList()
+        val minM = cameraAlongM.minOrNull() ?: 0.0
+        val maxM = cameraAlongM.maxOrNull() ?: 0.0
+        val corridorMidM = ((minM + maxM) / 2.0).coerceIn(0.0, totalM)
+        val pCorridorMid = RouteProjection.pointAt(poly, cum, corridorMidM)
+        val brgCorridorMid = RouteProjection.bearingAt(poly, cum, corridorMidM)
+
+        val tripMid = LatLng((origin.lat + dest.lat) / 2.0, (origin.lng + dest.lng) / 2.0)
+        val tripBrg = bearing(origin, dest)
+        val tripDist = distM(origin, dest)
+
+        val preExitM = (minM - 150.0).coerceAtLeast(0.0)
+        val pPreExit = RouteProjection.pointAt(poly, cum, preExitM)
+        val brgPreExit = RouteProjection.bearingAt(poly, cum, preExitM)
+
+        val (corridorOffsets, tripOffsets) = when (mode) {
+            TravelMode.WALK -> {
+                listOf(120.0, 250.0, 450.0) to listOf(150.0, 300.0, 500.0)
+            }
+            TravelMode.BICYCLE -> {
+                listOf(200.0, 400.0, 750.0, 1200.0) to listOf(250.0, 500.0, 900.0)
+            }
+            else -> {
+                // DRIVE: look far enough! 350m to 2800m spans suburban & urban parallel networks
+                listOf(350.0, 600.0, 950.0, 1400.0, 2000.0, 2800.0) to listOf(
+                    (tripDist * 0.25).coerceIn(400.0, 1500.0),
+                    (tripDist * 0.45).coerceIn(700.0, 2500.0),
+                    (tripDist * 0.70).coerceIn(1100.0, 3500.0),
+                    (tripDist * 1.00).coerceIn(1600.0, 5000.0),
+                ).distinct()
+            }
+        }
+
+        val prioritizedVias = ArrayList<LatLng>()
+
+        // 1. Interleave corridor midpoint and trip midpoint bypasses with progressive widths
+        val maxPairs = maxOf(corridorOffsets.size, tripOffsets.size)
+        for (i in 0 until maxPairs) {
+            if (i < corridorOffsets.size) {
+                val off = corridorOffsets[i]
+                prioritizedVias.add(offset(pCorridorMid, brgCorridorMid - 90.0, off))
+                prioritizedVias.add(offset(pCorridorMid, brgCorridorMid + 90.0, off))
+            }
+            if (i < tripOffsets.size) {
+                val off = tripOffsets[i]
+                prioritizedVias.add(offset(tripMid, tripBrg - 90.0, off))
+                prioritizedVias.add(offset(tripMid, tripBrg + 90.0, off))
+            }
+            if (i == 1 && preExitM > 50.0) {
+                val off = corridorOffsets[minOf(1, corridorOffsets.lastIndex)]
+                prioritizedVias.add(offset(pPreExit, brgPreExit - 90.0, off))
+                prioritizedVias.add(offset(pPreExit, brgPreExit + 90.0, off))
+            }
+        }
+
+        val wideCandidate = CandidateMulti(corridorMidM, cameraAlongM.size, prioritizedVias.distinct(), pCorridorMid)
+        val clusterCandidates = candidatesMulti(poly, cameraAlongM, isTotalAvoidance = true, mode = mode, maxClusters = 4)
+
+        return listOf(wideCandidate) + clusterCandidates
+    }
+
+    /** Direction from [a] to [b] in degrees (0..360, 0 = North, 90 = East). */
+    fun bearing(a: LatLng, b: LatLng): Double {
+        val dx = (b.lng - a.lng) * kotlin.math.cos(Math.toRadians(a.lat))
+        val dy = b.lat - a.lat
+        return (Math.toDegrees(kotlin.math.atan2(dx, dy)) + 360.0) % 360.0
+    }
+
     /** [p] moved [meters] along compass [bearingDeg]. Planar; exact to centimeters at this range. */
     internal fun offset(p: LatLng, bearingDeg: Double, meters: Double): LatLng {
         val b = Math.toRadians(bearingDeg)
