@@ -1901,7 +1901,7 @@ fun DirectionsPanel(
             // Route preferences, drive only (tolls/motorways/ferries mean nothing on foot or transit).
             // Honored on-device where the region graph carries the avoid profiles; online the
             // route falls back to normal rather than failing (the public OSRM can't exclude).
-            if (currentMode == TravelMode.DRIVE) {
+            if (currentMode == TravelMode.DRIVE || currentMode == TravelMode.WALK || currentMode == TravelMode.BICYCLE) {
                 Spacer(Modifier.height(10.dp))
                 Row(
                     Modifier.horizontalScroll(rememberScrollState()).padding(end = 12.dp),
@@ -1909,34 +1909,36 @@ fun DirectionsPanel(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(stringResource(R.string.place_avoid_label), style = MaterialTheme.typography.labelLarge, color = dim)
-                    FilterChip(
-                        selected = avoidTolls,
-                        onClick = { onAvoidTolls(!avoidTolls) },
-                        label = { Text(stringResource(R.string.place_avoid_short_tolls)) },
-                        shape = androidx.compose.foundation.shape.CircleShape,
-                        modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
-                    )
-                    FilterChip(
-                        selected = avoidHighways,
-                        onClick = { onAvoidHighways(!avoidHighways) },
-                        label = { Text(stringResource(R.string.place_avoid_short_highways)) },
-                        shape = androidx.compose.foundation.shape.CircleShape,
-                        modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
-                    )
-                    FilterChip(
-                        selected = avoidFerries,
-                        onClick = { onAvoidFerries(!avoidFerries) },
-                        label = { Text(stringResource(R.string.place_avoid_short_ferries)) },
-                        shape = androidx.compose.foundation.shape.CircleShape,
-                        modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
-                    )
-                    AvoidCamerasChip()
+                    if (currentMode == TravelMode.DRIVE) {
+                        FilterChip(
+                            selected = avoidTolls,
+                            onClick = { onAvoidTolls(!avoidTolls) },
+                            label = { Text(stringResource(R.string.place_avoid_short_tolls)) },
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
+                        )
+                        FilterChip(
+                            selected = avoidHighways,
+                            onClick = { onAvoidHighways(!avoidHighways) },
+                            label = { Text(stringResource(R.string.place_avoid_short_highways)) },
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
+                        )
+                        FilterChip(
+                            selected = avoidFerries,
+                            onClick = { onAvoidFerries(!avoidFerries) },
+                            label = { Text(stringResource(R.string.place_avoid_short_ferries)) },
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            modifier = Modifier.dpadHighlight(androidx.compose.foundation.shape.CircleShape),
+                        )
+                    }
+                    AvoidCamerasChip(mode = currentMode)
                 }
                 // Honesty note: with a toggle on but no offline region covering the trip, the online
                 // routers cannot honor it and used to just quietly route through tolls/highways
                 // anyway - say so instead of pretending (the "still routed me through the motorway"
                 // report). Keyed on the routes' own tag so it never shows when avoid worked.
-                if ((avoidTolls || avoidHighways || avoidFerries) && routes.isNotEmpty() && routes.all { it.avoidNotHonored }) {
+                if (currentMode == TravelMode.DRIVE && (avoidTolls || avoidHighways || avoidFerries) && routes.isNotEmpty() && routes.all { it.avoidNotHonored }) {
                     // Treatment upgraded (issue #286): this is the EXPLANATION for a control that
                     // otherwise looks broken - a new user flips Avoid tolls, gets routed down the
                     // toll road, and concludes the button does nothing. As dim bodySmall under the

@@ -34,6 +34,7 @@ object CoreModule {
             // everything else, and any transport failure, stays on OkHttp. See GoogleTransport.
             // First, so it sees every response including the Cronet ones: proof the internet answered.
             .addInterceptor(app.vela.core.net.NetHealth.interceptor)
+            .addInterceptor(app.vela.core.net.GitHubReleaseFallback.interceptor)
             .addInterceptor(app.vela.core.net.GoogleTransport.hook)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)

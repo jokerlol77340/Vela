@@ -6633,7 +6633,11 @@ class MapViewModel @Inject constructor(
                 shownDuration(routes)?.let { publishModeEta(etaKey, mode, formatDuration(it)) }
                 prefetchModeEtas(etaKey, origin, dest, stops, s.avoidTolls, s.avoidHighways, s.avoidFerries, s.directionsTimeMode, s.directionsTimeEpochSec, except = mode)
                 val flockEpoch = ++routesEpoch // stamp THIS route set; a newer route() bumps it and stales the flock job
-                if (routes.isNotEmpty()) refreshFlockOnRoute(routes, flockEpoch, origin, dest, mode, stops, s.avoidTolls, s.avoidHighways, s.avoidFerries)
+                if (routes.isNotEmpty()) {
+                    refreshFlockOnRoute(routes, flockEpoch, origin, dest, mode, stops, s.avoidTolls, s.avoidHighways, s.avoidFerries)
+                    refreshFlockNow()
+                    refreshSpeedCamsNow()
+                }
                 // Warm the region's road-features file while the chooser is up: its first parse
                 // (176k features, 1.5 s on a 4a) used to land in the drive's first seconds beside
                 // the tile workers and the voice (Perfetto 2026-09-28).
@@ -6869,47 +6873,43 @@ class MapViewModel @Inject constructor(
         avoidFerries: Boolean,
     ) {
         flockRouteJob?.cancel()
-        if (!app.vela.ui.FlockRouteAlert.on.value) return
+        val avoidType = app.vela.ui.FlockRouteAlert.typeFor(mode)
+        if (avoidType == app.vela.ui.CameraAvoidType.NONE) {
+            if (_state.value.flockOnRoute.isNotEmpty()) _state.update { it.copy(flockOnRoute = emptyList()) }
+            return
+        }
         flockRouteJob = viewModelScope.launch {
-            val counts = withContext(Dispatchers.Default) {
-                val local = app.vela.data.FlockCameras.isLoaded
-                routes.map { r ->
-                    // Bundled dataset: instant + reliable, so the auto-avoid re-rank always has real counts to
-                    // work with (the live Overpass fan-out per tile was slow and often returned 0 = nothing to
-                    // avoid). Fall back to Overpass only until the bundled set finishes loading.
-                    // Both paths are direction-aware (nav/CameraFacing): a camera aimed across
-                    // the road is not counted against a route it cannot read.
-                    if (local) app.vela.data.FlockCameras.along(r.polyline).size
-                    else runCatching { app.vela.core.data.OverpassAlprCameras.fetchAlong(http, r.polyline).size }.getOrDefault(0)
+            app.vela.data.FlockCameras.ensureLoaded(appContext)
+            if (app.vela.ui.FlockRouteAlert.includeSpeedCameras(avoidType)) {
+                app.vela.data.BundledSpeedCameras.ensureLoaded(appContext)
+            }
+            val liveAlprPool = withContext(Dispatchers.IO) {
+                routes.flatMap { r ->
+                    runCatching { app.vela.core.data.OverpassAlprCameras.fetchAlong(http, r.polyline, nearMeters = 60.0) }.getOrDefault(emptyList())
                 }
             }
-            android.util.Log.i("VelaFlockRoute", "counts=$counts")
-            // Still THIS route set? Guard on the epoch, not the polyline: naming a provisional route
-            // (selectRoute(0), which fires right after this launches for the common provisional-top case)
-            // RE-SNAPS its geometry, so a polyline compare tripped and silently dropped the badges +
-            // auto-avoid. The epoch only bumps on a fresh route(); naming/user-pick keep the same set
-            // (same size + order), so the counts still line up index-for-index with _state.routes.
+            val liveSpeedPool = if (app.vela.ui.FlockRouteAlert.includeSpeedCameras(avoidType)) {
+                withContext(Dispatchers.IO) {
+                    routes.flatMap { r ->
+                        runCatching { app.vela.core.data.OverpassSpeedCameras.fetchAlongCorridor(http, r.polyline, radiusM = 75) }.getOrNull().orEmpty()
+                    }
+                }
+            } else emptyList()
+            val counts = withContext(Dispatchers.Default) {
+                routes.map { r ->
+                    camerasMatchingAvoidOnPoly(r.polyline, avoidType, liveAlprPool, liveSpeedPool).size
+                }
+            }
+            android.util.Log.i("VelaFlockRoute", "mode=$mode avoidType=$avoidType counts=$counts")
             val cur = _state.value.routes
             if (routesEpoch != epoch || cur.size != counts.size) return@launch
             _state.update { it.copy(flockOnRoute = counts) }
-            // Auto-avoid: pick the fewest-camera route (tie → the faster one) IF it beats the fastest on
-            // cameras and costs at most 25% / 10 min more. The cap is where we "draw the line" - a modest
-            // detour to dodge cameras, not a wild one. Long-press "route through here" is the manual override.
             val eta = { r: Route -> r.durationInTrafficSeconds ?: r.durationSeconds }
-            val eta0 = eta(cur[0]) // routes are sorted fastest-first, and cur[0] is the default active
+            val eta0 = eta(cur[0])
             val cap = minOf(eta0 * 0.25, 600.0)
             if (counts.any { it > 0 }) {
-                // One rule for the pick (`CameraDetour.choose`), shared with the side-street pass below
-                // so the two stages cannot disagree about what "better" means.
                 val best = app.vela.core.nav.CameraDetour.choose(cur.indices.map { app.vela.core.nav.CameraDetour.Option(counts[it], eta(cur[it])) }, eta0, cap)
-                // No heads-up flash for the swap (removed 2026-07-13): the reorder below makes
-                // the pick visible at the top of the list; the banner was noise on the card.
                 if (best != null) {
-                    // The avoided route LEADS the list (user 2026-07-14): with avoid-cameras on
-                    // the ranking is augmented by camera counts, not pure ETA - the low-camera
-                    // pick moves to the top for visibility and its count badge moves with it.
-                    // The "Fastest" tag still lands on the true fastest row (it keys off the
-                    // shown ETA, not list position), so the tradeoff stays legible.
                     val order = listOf(best) + counts.indices.filter { it != best }
                     _state.update {
                         it.copy(
@@ -6920,18 +6920,7 @@ class MapViewModel @Inject constructor(
                     selectRoute(0)
                 }
             }
-            // SIDE STREETS (issue #600, opt-in): the leading route still passes cameras, so try the
-            // reporter's own workaround for them - a point a little way to either side of the road
-            // at each camera cluster, routed through like a stop. Google routes and prices every
-            // candidate through its stops with traffic (the 2026-09-21 waypoint work), so the
-            // compare against the same cap as the re-rank is an honest one.
-            // EVERY candidate route gets the pass, not only the leader (the re-rank and the pass used
-            // to disagree: a route whose three cameras sit on an arterial with a parallel street beside
-            // it detours to zero, while the one-camera route whose camera sits on a bridge won the
-            // re-rank and was the only one tried). One request budget for the trip, shared in list
-            // order (the leader first), and a cluster already tried from another route is skipped,
-            // since routes share arterials and the same corner gets the same side streets.
-            if (app.vela.ui.FlockDetour.on.value && mode == TravelMode.DRIVE) {
+            if (app.vela.ui.FlockDetour.on.value && (mode == TravelMode.DRIVE || mode == TravelMode.WALK || mode == TravelMode.BICYCLE)) {
                 val routesNow = _state.value.routes
                 val countsNow = _state.value.flockOnRoute
                 if (routesNow.size == countsNow.size && countsNow.any { it > 0 }) {
@@ -6941,12 +6930,11 @@ class MapViewModel @Inject constructor(
                     for (i in routesNow.indices) {
                         if (budget[0] <= 0) break
                         if (countsNow[i] <= 0 || routesNow[i].detourPlan.isNotEmpty()) continue
-                        val r = tryCameraDetour(routesNow[i], countsNow[i], eta0, cap, epoch, origin, dest, mode, stops, avoidTolls, avoidHighways, avoidFerries, budget, tried)
+                        val r = tryCameraDetour(routesNow[i], countsNow[i], eta0, cap, epoch, origin, dest, mode, avoidType, liveAlprPool, liveSpeedPool, stops, avoidTolls, avoidHighways, avoidFerries, budget, tried)
                         if (routesEpoch != epoch) return@launch
                         if (r != null) results += r
                     }
                     if (results.isNotEmpty()) {
-                        // The leader now against every detour found: fewest cameras, then time, inside the cap.
                         val options = listOf(app.vela.core.nav.CameraDetour.Option(countsNow[0], eta(routesNow[0]))) +
                             results.map { (r, n) -> app.vela.core.nav.CameraDetour.Option(n, eta(r)) }
                         val pick = app.vela.core.nav.CameraDetour.choose(options, eta0, cap)
@@ -6962,16 +6950,37 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    /** One greedy pass over the camera clusters of [route]: for each, its left then right point is
-     *  added to the trip and the trip re-routed; a candidate that passes fewer cameras inside
-     *  [cap] is kept and the next cluster builds on it. Clusters within `SAME_CLUSTER_M` of one in
-     *  [tried] are skipped and the ones tried here are added to it; every request comes out of
-     *  [budget] (the trip's, shared across routes) and at most `MAX_REQUESTS_PER_ROUTE` are spent
-     *  here. Returns the best route found with its camera count, carrying its waypoint plan
-     *  ([Route.detourPlan]) so a drive keeps the detour; null when nothing beat [routeCount]. */
+    private fun camerasMatchingAvoidOnPoly(
+        poly: List<LatLng>,
+        avoidType: app.vela.ui.CameraAvoidType,
+        liveAlprPool: List<app.vela.core.data.AlprCamera>,
+        liveSpeedPool: List<app.vela.core.data.SpeedCamera>,
+    ): List<LatLng> {
+        if (avoidType == app.vela.ui.CameraAvoidType.NONE || poly.size < 2) return emptyList()
+        val bundledAlpr = if (app.vela.data.FlockCameras.isLoaded) app.vela.data.FlockCameras.along(poly) else emptyList()
+        val liveAlprOnPoly = liveAlprPool.filter {
+            app.vela.core.nav.CameraFacing.onRoute(poly, it.loc, app.vela.core.nav.CameraFacing.parse(it.direction), 45.0)
+        }
+        val mergedAlpr = app.vela.data.FlockCameras.mergeAndDedupe(bundledAlpr, liveAlprOnPoly)
+        val filteredAlpr = app.vela.ui.FlockRouteAlert.filterAlprAndSurveillance(mergedAlpr, avoidType).map { it.loc }
+        if (!app.vela.ui.FlockRouteAlert.includeSpeedCameras(avoidType)) return filteredAlpr
+
+        val bundledSpeed = app.vela.data.BundledSpeedCameras.along(poly, 55.0)
+        val bakedSpeed = app.vela.data.RoadFeatures.camerasAlong(poly, 55.0)
+        val liveSpeedOnPoly = liveSpeedPool.filter {
+            app.vela.core.data.OverpassAlprCameras.nearPolyline(it.loc, poly, 55.0)
+        }
+        val mergedSpeed = app.vela.data.BundledSpeedCameras.mergeAndDedupe(bundledSpeed, bakedSpeed, liveSpeedOnPoly).map { it.loc }
+        return filteredAlpr + mergedSpeed
+    }
+
     private suspend fun tryCameraDetour(
         route: Route, routeCount: Int, eta0: Double, cap: Double, epoch: Int,
-        origin: LatLng, dest: LatLng, mode: TravelMode, stops: List<LatLng>,
+        origin: LatLng, dest: LatLng, mode: TravelMode,
+        avoidType: app.vela.ui.CameraAvoidType,
+        liveAlprPool: List<app.vela.core.data.AlprCamera>,
+        liveSpeedPool: List<app.vela.core.data.SpeedCamera>,
+        stops: List<LatLng>,
         avoidTolls: Boolean, avoidHighways: Boolean, avoidFerries: Boolean,
         budget: IntArray, tried: MutableList<LatLng>,
     ): Pair<Route, Int>? {
@@ -6979,7 +6988,8 @@ class MapViewModel @Inject constructor(
         val poly = route.polyline
         val cum = app.vela.core.nav.RouteProjection.cumulative(poly)
         val cands = withContext(Dispatchers.Default) {
-            val along = app.vela.data.FlockCameras.along(poly).mapNotNull { app.vela.core.nav.RouteProjection.alongMeters(poly, cum, it.loc, 45.0) }
+            val hits = camerasMatchingAvoidOnPoly(poly, avoidType, liveAlprPool, liveSpeedPool)
+            val along = hits.mapNotNull { loc -> app.vela.core.nav.RouteProjection.alongMeters(poly, cum, loc, 60.0) }
             app.vela.core.nav.CameraDetour.untried(app.vela.core.nav.CameraDetour.candidates(poly, along), tried)
         }
         if (cands.isEmpty()) return null
@@ -6999,7 +7009,9 @@ class MapViewModel @Inject constructor(
                 val r = runCatching { dataSource.directions(origin, dest, mode, plan, avoidTolls, avoidHighways, avoidFerries) }
                     .getOrDefault(emptyList()).firstOrNull() ?: continue
                 if (routesEpoch != epoch) return null
-                val n = withContext(Dispatchers.Default) { app.vela.data.FlockCameras.along(r.polyline).size }
+                val n = withContext(Dispatchers.Default) {
+                    camerasMatchingAvoidOnPoly(r.polyline, avoidType, liveAlprPool, liveSpeedPool).size
+                }
                 val extra = eta(r) - eta0
                 if (n < bestCount && extra <= cap) {
                     vias = trial
@@ -9764,8 +9776,17 @@ class MapViewModel @Inject constructor(
     /** Fixed radar/speed cameras for the viewport (issue #229). Mirrors [refreshFlock]'s contract
      *  minus the bundled dataset: opt-in, sparse-landmark zoom floor, padded area cache, 350 ms
      *  settle, failure never cached so the next viewport retries. */
+    private var speedCamRoutesKey = 0
+
     private fun refreshSpeedCams(south: Double, west: Double, north: Double, east: Double, zoom: Double) {
-        if (!app.vela.ui.SpeedCams.on.value || zoom < FLOCK_MIN_ZOOM) {
+        val st = _state.value
+        val shown = if (st.navigating) listOfNotNull(st.activeRoute) else st.routes
+        val routesKey = if (shown.isEmpty()) 0 else shown.fold(17) { h, r -> 31 * h + System.identityHashCode(r) }
+        if (routesKey != speedCamRoutesKey) {
+            speedCamRoutesKey = routesKey
+            speedCamBox = null
+        }
+        if (!app.vela.ui.SpeedCams.on.value || (zoom < FLOCK_MIN_ZOOM && shown.isEmpty())) {
             speedCamBox = null
             speedCamJob?.cancel()
             if (_state.value.speedCameras.isNotEmpty()) _state.update { it.copy(speedCameras = emptyList()) }
@@ -9778,24 +9799,57 @@ class MapViewModel @Inject constructor(
         }
         speedCamJob?.cancel()
         speedCamJob = viewModelScope.launch {
-            delay(350)
+            app.vela.data.BundledSpeedCameras.ensureLoaded(appContext)
             val padLat = (north - south) * 0.5; val padLng = (east - west) * 0.5
             val s = south - padLat; val n = north + padLat; val w = west - padLng; val e = east + padLng
-            val cover = roadFeaturesCover(s, w, n, e)
-            val res = when (cover) {
-                RoadCover.LOADED -> app.vela.data.RoadFeatures.camerasInBox(s, w, n, e)
-                RoadCover.FAILED -> null
-                RoadCover.NONE -> withContext(Dispatchers.IO) {
-                    runCatching { app.vela.core.data.OverpassSpeedCameras.fetchInBox(http, s, w, n, e) }.getOrNull()
+            val instantRoute = if (shown.isNotEmpty()) {
+                withContext(Dispatchers.Default) {
+                    app.vela.data.BundledSpeedCameras.mergeAndDedupe(
+                        *shown.map { app.vela.data.BundledSpeedCameras.along(it.polyline, 150.0) }.toTypedArray()
+                    )
                 }
+            } else emptyList()
+            val instantBox = if (zoom >= FLOCK_MIN_ZOOM) {
+                withContext(Dispatchers.Default) { app.vela.data.BundledSpeedCameras.inBox(s, w, n, e) }
+            } else emptyList()
+            val initial = withContext(Dispatchers.Default) {
+                app.vela.data.BundledSpeedCameras.mergeAndDedupe(instantRoute, instantBox)
             }
-            if (res == null) {
-                diag.record("speedcam", "camera fetch failed at z${"%.1f".format(zoom)}", "box [$s,$w,$n,$e] source=${cover.name.lowercase()}")
-                return@launch
+            if (initial.isNotEmpty()) {
+                _state.update { it.copy(speedCameras = initial.take(800)) }
+            }
+            delay(250)
+            val bakedRoute = if (shown.isNotEmpty()) {
+                withContext(Dispatchers.Default) {
+                    shown.flatMap { r ->
+                        if (roadFeaturesCoverRoute(r.polyline) == RoadCover.LOADED) {
+                            app.vela.data.RoadFeatures.camerasAlong(r.polyline, 150.0)
+                        } else emptyList()
+                    }
+                }
+            } else emptyList()
+            val coverBox = if (zoom >= FLOCK_MIN_ZOOM) roadFeaturesCover(s, w, n, e) else RoadCover.FAILED
+            val bakedBox = if (coverBox == RoadCover.LOADED) {
+                withContext(Dispatchers.Default) { app.vela.data.RoadFeatures.camerasInBox(s, w, n, e) }
+            } else emptyList()
+            val liveBox = if (zoom >= FLOCK_MIN_ZOOM && (east - west) <= 1.5 && (north - south) <= 1.5) {
+                withContext(Dispatchers.IO) {
+                    runCatching { app.vela.core.data.OverpassSpeedCameras.fetchInBox(http, s, w, n, e) }.getOrNull().orEmpty()
+                }
+            } else emptyList()
+            val liveRoute = if (shown.isNotEmpty() && zoom < FLOCK_MIN_ZOOM) {
+                withContext(Dispatchers.IO) {
+                    shown.take(2).flatMap { r ->
+                        runCatching { app.vela.core.data.OverpassSpeedCameras.fetchAlongCorridor(http, r.polyline) }.getOrNull().orEmpty()
+                    }
+                }
+            } else emptyList()
+            val merged = withContext(Dispatchers.Default) {
+                app.vela.data.BundledSpeedCameras.mergeAndDedupe(initial, bakedRoute, bakedBox, liveBox, liveRoute)
             }
             speedCamBox = doubleArrayOf(s, w, n, e)
-            diag.record("speedcam", "showing ${res.size} camera(s) at z${"%.1f".format(zoom)}", if (cover == RoadCover.LOADED) "baked" else "overpass")
-            _state.update { it.copy(speedCameras = res.take(600)) }
+            diag.record("speedcam", "showing ${merged.size} camera(s) at z${"%.1f".format(zoom)}", "multi-source")
+            _state.update { it.copy(speedCameras = merged.take(800)) }
         }
     }
 
@@ -10106,51 +10160,51 @@ class MapViewModel @Inject constructor(
     /** ALPR/Flock cameras for the viewport, when the layer is on. Mirrors [refreshTrafficControls]:
      *  high-zoom only, area-cached (cameras are static), 350 ms debounced, failure not cached. */
     private fun refreshFlock(south: Double, west: Double, north: Double, east: Double, zoom: Double) {
-        // ALPR cameras are SPARSE landmarks people want from a neighborhood view (the way
-        // maps.deflock.org shows them), not dense street furniture like stop signs - fetch from a wider
-        // zoom than the traffic controls. The tag is rare, so the wider Overpass box stays light.
-        if (!app.vela.ui.Flock.on.value || zoom < FLOCK_MIN_ZOOM) {
-            flockBox = null
-            flockJob?.cancel()
-            if (flockOnRoute == null) flockOnRouteJobKey = 0 // a cancelled route pass has to be asked for again
-            if (_state.value.flockCameras.isNotEmpty()) _state.update { it.copy(flockCameras = emptyList()) }
-            return
-        }
-        val cLat = (south + north) / 2; val cLng = (west + east) / 2
-        // WITH A ROUTE UP (the chooser or a drive) only the cameras ON a shown route draw: a long
-        // route's overview is a low zoom over a whole metro, and every camera in it was a badge
-        // and a cone to place on each pan (user 2026-10-02). Same test as the route counts
-        // (within 45 m and facing the road).
         val st = _state.value
         val shown = if (st.navigating) listOfNotNull(st.activeRoute) else st.routes
         val routesKey = if (shown.isEmpty()) 0 else shown.fold(17) { h, r -> 31 * h + System.identityHashCode(r) }
         if (routesKey != flockRoutesKey) { flockRoutesKey = routesKey; flockBox = null; flockOnRoute = null; flockOnRouteJobKey = 0 }
-        if (shown.isNotEmpty() && app.vela.data.FlockCameras.isLoaded) {
-            // The on-route set is worked out ONCE per set of routes. It used to be recomputed over
-            // the whole route every time the view left the cached box, which a camera following a
-            // car does every few hundred meters: a compute thread busy for the whole drive, a new
-            // list each time, and the camera source uploaded again for nothing.
+        if (!app.vela.ui.Flock.on.value || (zoom < FLOCK_MIN_ZOOM && shown.isEmpty())) {
+            flockBox = null
+            flockJob?.cancel()
+            if (flockOnRoute == null) flockOnRouteJobKey = 0
+            if (_state.value.flockCameras.isNotEmpty()) _state.update { it.copy(flockCameras = emptyList()) }
+            return
+        }
+        val cLat = (south + north) / 2; val cLng = (west + east) / 2
+        if (shown.isNotEmpty()) {
             val all = flockOnRoute
             if (all == null) {
-                if (flockOnRouteJobKey == routesKey) return // already being worked out
+                if (flockOnRouteJobKey == routesKey) return
                 flockOnRouteJobKey = routesKey
                 flockJob?.cancel()
                 flockJob = viewModelScope.launch {
-                    val res = withContext(Dispatchers.Default) { shown.flatMap { app.vela.data.FlockCameras.along(it.polyline) }.distinct() }
-                    if (flockRoutesKey != routesKey) return@launch // the routes changed meanwhile
+                    app.vela.data.FlockCameras.ensureLoaded(appContext)
+                    val bundled = withContext(Dispatchers.Default) {
+                        app.vela.data.FlockCameras.mergeAndDedupe(*shown.map { app.vela.data.FlockCameras.along(it.polyline) }.toTypedArray())
+                    }
+                    if (bundled.isNotEmpty() && flockRoutesKey == routesKey) {
+                        _state.update { it.copy(flockCameras = bundled.take(CONTROLS_ONSCREEN_CAP)) }
+                    }
+                    val live = withContext(Dispatchers.IO) {
+                        shown.take(2).flatMap { r ->
+                            runCatching { app.vela.core.data.OverpassAlprCameras.fetchAlong(http, r.polyline, nearMeters = 55.0) }.getOrDefault(emptyList())
+                        }
+                    }
+                    val res = withContext(Dispatchers.Default) {
+                        app.vela.data.FlockCameras.mergeAndDedupe(bundled, live)
+                    }
+                    if (flockRoutesKey != routesKey) return@launch
                     flockOnRoute = res
-                    diag.record("flock", "route set: ${res.size} camera(s) on ${shown.size} route(s)", "bundled dataset")
+                    diag.record("flock", "route set: ${res.size} camera(s) on ${shown.size} route(s)", "multi-source")
                     lastFlockViewport?.let { refreshFlock(it[0], it[1], it[2], it[3], it[4]) }
                 }
                 return
             }
-            // Few enough to draw them all: set once, nothing to do as the view moves.
             if (all.size <= CONTROLS_ONSCREEN_CAP) {
                 if (_state.value.flockCameras !== all) _state.update { it.copy(flockCameras = all) }
                 return
             }
-            // A very long route with more cameras than the cap: the nearest to the view, from the
-            // list already in hand.
             flockBox?.let { b ->
                 val insLat = (b[2] - b[0]) * 0.25; val insLng = (b[3] - b[1]) * 0.25
                 if (cLat in (b[0] + insLat)..(b[2] - insLat) && cLng in (b[1] + insLng)..(b[3] - insLng)) return
@@ -10168,38 +10222,29 @@ class MapViewModel @Inject constructor(
         }
         val padLat = (north - south) * 0.5; val padLng = (east - west) * 0.5
         val s = south - padLat; val n = north + padLat; val w = west - padLng; val e = east + padLng
-        // FAST PATH: the bundled on-device dataset - instant, no Overpass round-trip. This is what makes
-        // the layer draw like a tile instead of waiting on a network fetch per viewport (user 2026-07-13).
-        if (app.vela.data.FlockCameras.isLoaded) {
-            flockJob?.cancel()
-            flockJob = viewModelScope.launch {
-                val res = withContext(Dispatchers.Default) { app.vela.data.FlockCameras.inBox(s, w, n, e) }
-                flockBox = doubleArrayOf(s, w, n, e)
-                val kept = capFlock(res, s, n, w, e)
-                diag.record("flock", "showing ${kept.size} camera(s) at z${"%.1f".format(zoom)}", "bundled dataset")
-                _state.update { it.copy(flockCameras = kept) }
-            }
-            return
-        }
         flockJob?.cancel()
         flockJob = viewModelScope.launch {
-            delay(350)
-            // fetchInBox returns NULL on failure (network/timeout/non-2xx), an empty list on a clean
-            // "no cameras here". Record both to the shareable diagnostic (Settings -> Diagnostics): on
-            // GrapheneOS adb logcat can't see app logs, so this is how a "cameras don't show" report is
-            // actually diagnosable - the user shares diagnostics and the fetch outcome is right there.
-            val res = withContext(Dispatchers.IO) {
-                runCatching { app.vela.core.data.OverpassAlprCameras.fetchInBox(http, s, w, n, e) }.getOrNull()
+            app.vela.data.FlockCameras.ensureLoaded(appContext)
+            val bundled = withContext(Dispatchers.Default) { app.vela.data.FlockCameras.inBox(s, w, n, e) }
+            if (bundled.isNotEmpty()) {
+                _state.update { it.copy(flockCameras = capFlock(bundled, s, n, w, e)) }
             }
-            if (res == null) {
+            delay(300)
+            val live = if ((east - west) <= 1.2 && (north - south) <= 1.2) {
+                withContext(Dispatchers.IO) {
+                    runCatching { app.vela.core.data.OverpassAlprCameras.fetchInBox(http, s, w, n, e) }.getOrNull()
+                }
+            } else emptyList()
+            if (live == null && bundled.isEmpty()) {
                 diag.record("flock", "camera fetch failed at z${"%.1f".format(zoom)}", "Overpass box [$s,$w,$n,$e]")
-                android.util.Log.i("VelaFlock", "fetch FAILED zoom=$zoom")
                 return@launch
             }
+            val merged = withContext(Dispatchers.Default) {
+                app.vela.data.FlockCameras.mergeAndDedupe(bundled, live.orEmpty())
+            }
             flockBox = doubleArrayOf(s, w, n, e)
-            val kept = capFlock(res, s, n, w, e)
-            diag.record("flock", "showing ${kept.size} camera(s) at z${"%.1f".format(zoom)}", if (res.size != kept.size) "fetched ${res.size}, capped" else null)
-            android.util.Log.i("VelaFlock", "fetched=${res.size} kept=${kept.size} zoom=$zoom")
+            val kept = capFlock(merged, s, n, w, e)
+            diag.record("flock", "showing ${kept.size} camera(s) at z${"%.1f".format(zoom)}", "multi-source")
             _state.update { it.copy(flockCameras = kept) }
         }
     }

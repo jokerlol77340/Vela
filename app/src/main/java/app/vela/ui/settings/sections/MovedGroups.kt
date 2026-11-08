@@ -57,17 +57,51 @@ internal fun CameraSettingsGroup() {
             hint = stringResource(R.string.settings_flock_hint),
             leading = { app.vela.ui.PlateCameraBadge() },
         )
-        ToggleRow(
-            label = stringResource(R.string.settings_flock_route_alert),
-            checked = app.vela.ui.FlockRouteAlert.on.value,
-            onCheckedChange = { app.vela.ui.FlockRouteAlert.set(context, it) },
-            hint = stringResource(R.string.settings_flock_route_alert_hint),
-        )
+        androidx.compose.foundation.layout.Column(
+            Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+        ) {
+            Text(
+                stringResource(R.string.settings_flock_avoid_per_mode_title),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+            )
+            Hint(stringResource(R.string.settings_flock_avoid_per_mode_hint))
+            androidx.compose.foundation.layout.Spacer(Modifier.height(6.dp))
+            CameraAvoidModeSelector(
+                modeLabel = stringResource(R.string.settings_flock_mode_drive),
+                selected = app.vela.ui.FlockRouteAlert.driveType.value,
+                onSelect = {
+                    app.vela.ui.FlockRouteAlert.setTypeFor(context, app.vela.core.model.TravelMode.DRIVE, it)
+                    app.vela.ui.RouteActions.camerasChanged?.invoke()
+                },
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.height(6.dp))
+            CameraAvoidModeSelector(
+                modeLabel = stringResource(R.string.settings_flock_mode_walk),
+                selected = app.vela.ui.FlockRouteAlert.walkType.value,
+                onSelect = {
+                    app.vela.ui.FlockRouteAlert.setTypeFor(context, app.vela.core.model.TravelMode.WALK, it)
+                    app.vela.ui.RouteActions.camerasChanged?.invoke()
+                },
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.height(6.dp))
+            CameraAvoidModeSelector(
+                modeLabel = stringResource(R.string.settings_flock_mode_bike),
+                selected = app.vela.ui.FlockRouteAlert.bikeType.value,
+                onSelect = {
+                    app.vela.ui.FlockRouteAlert.setTypeFor(context, app.vela.core.model.TravelMode.BICYCLE, it)
+                    app.vela.ui.RouteActions.camerasChanged?.invoke()
+                },
+            )
+        }
         if (app.vela.ui.FlockRouteAlert.on.value) {
             ToggleRow(
                 label = stringResource(R.string.settings_flock_detour),
                 checked = app.vela.ui.FlockDetour.on.value,
-                onCheckedChange = { app.vela.ui.FlockDetour.set(context, it) },
+                onCheckedChange = {
+                    app.vela.ui.FlockDetour.set(context, it)
+                    app.vela.ui.RouteActions.camerasChanged?.invoke()
+                },
                 hint = stringResource(R.string.settings_flock_detour_hint),
             )
         }
@@ -161,6 +195,43 @@ private fun CameraDistanceSelector(
             }
         }
         Hint(stringResource(R.string.settings_speed_cam_distance_hint))
+    }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun CameraAvoidModeSelector(
+    modeLabel: String,
+    selected: app.vela.ui.CameraAvoidType,
+    onSelect: (app.vela.ui.CameraAvoidType) -> Unit,
+) {
+    val options = listOf(
+        app.vela.ui.CameraAvoidType.NONE to R.string.camera_avoid_none,
+        app.vela.ui.CameraAvoidType.ALPR_ONLY to R.string.camera_avoid_alpr_only,
+        app.vela.ui.CameraAvoidType.SURVEILLANCE_ONLY to R.string.camera_avoid_surveillance_only,
+        app.vela.ui.CameraAvoidType.ALL_CAMERAS to R.string.camera_avoid_all,
+    )
+    androidx.compose.foundation.layout.Column {
+        Text(
+            modeLabel,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 2.dp),
+        )
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            val focus = remember { List(options.size) { FocusRequester() } }
+            options.forEachIndexed { i, (type, labelRes) ->
+                FilterChip(
+                    selected = selected == type,
+                    onClick = { onSelect(type) },
+                    label = { Text(stringResource(labelRes)) },
+                    shape = androidx.compose.foundation.shape.CircleShape,
+                    modifier = Modifier
+                        .dpadHighlight(androidx.compose.foundation.shape.CircleShape)
+                        .dpadRowSibling(focus, i),
+                )
+            }
+        }
     }
 }
 

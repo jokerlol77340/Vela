@@ -105,6 +105,42 @@ private fun NavGeneralSection(
     vm: MapViewModel,
     topRow: Modifier,
 ) {
+    var avoidTolls by remember { mutableStateOf(prefs.getBoolean("avoid_tolls", false)) }
+    var avoidHighways by remember { mutableStateOf(prefs.getBoolean("avoid_highways", false)) }
+    var avoidFerries by remember { mutableStateOf(prefs.getBoolean("avoid_ferries", false)) }
+    SettingsGroup(title = stringResource(R.string.place_avoid_label)) {
+        ToggleRow(
+            label = stringResource(R.string.car_setting_avoid_tolls),
+            checked = avoidTolls,
+            onCheckedChange = {
+                avoidTolls = it
+                vm.setAvoidTolls(it)
+            },
+            hint = stringResource(R.string.settings_nav_avoid_tolls_hint),
+            switchModifier = topRow,
+        )
+        GroupDivider()
+        ToggleRow(
+            label = stringResource(R.string.car_setting_avoid_highways),
+            checked = avoidHighways,
+            onCheckedChange = {
+                avoidHighways = it
+                vm.setAvoidHighways(it)
+            },
+            hint = stringResource(R.string.settings_nav_avoid_highways_hint),
+        )
+        GroupDivider()
+        ToggleRow(
+            label = stringResource(R.string.car_setting_avoid_ferries),
+            checked = avoidFerries,
+            onCheckedChange = {
+                avoidFerries = it
+                vm.setAvoidFerries(it)
+            },
+            hint = stringResource(R.string.settings_nav_avoid_ferries_hint),
+        )
+    }
+
     var keepAwake by remember { mutableStateOf(prefs.getBoolean("keep_screen_on_nav", true)) }
     SettingsGroup {
         ToggleRow(
@@ -115,7 +151,6 @@ private fun NavGeneralSection(
                 prefs.edit().putBoolean("keep_screen_on_nav", it).apply()
             },
             hint = stringResource(R.string.settings_keep_screen_on_hint),
-            switchModifier = topRow,
         )
 
         GroupDivider()

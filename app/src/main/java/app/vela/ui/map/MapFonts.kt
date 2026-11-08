@@ -113,6 +113,7 @@ object MapFonts {
         val http = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
+            .addInterceptor(app.vela.core.net.GitHubReleaseFallback.interceptor)
             .build()
         val fontsBase = app.vela.core.config.VelaLinks.mapFonts().trimEnd('/')
 

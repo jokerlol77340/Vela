@@ -66,7 +66,7 @@ object RoadFeatures {
     private val loaded = LinkedHashMap<String, Loaded>()
 
     private val http: OkHttpClient by lazy {
-        OkHttpClient.Builder().callTimeout(0, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build()
+        OkHttpClient.Builder().callTimeout(0, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).addInterceptor(app.vela.core.net.GitHubReleaseFallback.interceptor).build()
     }
 
     private fun key(row: Long, col: Long): Long = (row shl 32) xor (col and 0xffffffffL)

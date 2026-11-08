@@ -30,6 +30,7 @@ object StreamedPmtiles : Interceptor {
     private val client by lazy {
         okhttp3.OkHttpClient.Builder()
             .addInterceptor(ReleaseRedirects) // the signed address of a release file, kept between reads
+            .addInterceptor(app.vela.core.net.GitHubReleaseFallback.interceptor)
             .callTimeout(30, TimeUnit.SECONDS)
             .build()
     }

@@ -170,7 +170,9 @@ class VelaApp : Application(), coil.ImageLoaderFactory {
             // fall back to their boxes, which is what they always were.
             app.vela.offline.RegionPolys.ensureLoaded(this@VelaApp)
             app.vela.data.FlockCameras.ensureLoaded(this@VelaApp)
+            app.vela.data.BundledSpeedCameras.ensureLoaded(this@VelaApp)
             app.vela.data.FlockCameras.refresh(this@VelaApp, app.vela.core.config.VelaLinks.flockManifest())
+            app.vela.data.BundledSpeedCameras.refreshOfficial(this@VelaApp)
         }
         app.vela.ui.SimLocation.onChange = {
             locationProvider.pinned = it

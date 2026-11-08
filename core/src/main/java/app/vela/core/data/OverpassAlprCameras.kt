@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 /** An automated license-plate reader (ALPR / "Flock") camera at [loc]. [operator] is the agency/company
  *  that runs it when tagged (e.g. "Flock Safety"), [direction] the way it points (OSM `direction`, degrees
  *  or a compass string) when known - both may be blank. */
-data class AlprCamera(val loc: LatLng, val operator: String = "", val direction: String = "")
+data class AlprCamera(val loc: LatLng, val operator: String = "", val direction: String = "", val isAlpr: Boolean = true)
 
 /** Minimal Overpass response shape for STREAM parsing (only the fields we read). Keeping this tiny +
  *  decoding straight off the socket avoids ever holding the whole response String or a full JsonElement
@@ -67,7 +67,7 @@ object OverpassAlprCameras {
         // lat/lon, so the parser dropped every camera (no coordinates) and the layer drew nothing.
         // `out body` prints id, lat, lon AND tags - what we need to place the marker + read operator.
         val query = "[out:json][timeout:25];" +
-            "node[\"surveillance:type\"=\"ALPR\"]$box;out body $limit;"
+            "(node[\"surveillance:type\"~\"ALPR|ANPR\",i]$box;node[\"camera:type\"~\"ALPR|ANPR\",i]$box;node[\"man_made\"=\"surveillance\"][\"surveillance\"~\"traffic|public|outdoor\"]$box;node[\"man_made\"=\"surveillance\"][\"surveillance:zone\"~\"traffic|town|road\"]$box;);out body $limit;"
         // Failover across mirrors: a 504 from the primary overpass-api.de (common under load) used to fail
         // the whole fetch and silently blank the layer. run() returns null only when EVERY endpoint fails.
         return OverpassEndpoints.run(slow(http), query) { body ->
@@ -83,7 +83,17 @@ object OverpassAlprCameras {
                 // (usually the agency, often absent) - fall back to it so the camera shows who runs it.
                 val op = (n.tags?.get("operator") ?: n.tags?.get("manufacturer")).orEmpty()
                 val dir = normDirection(n.tags?.get("direction") ?: n.tags?.get("camera:direction"))
-                AlprCamera(LatLng(lat, lng), op, dir)
+                val sType = n.tags?.get("surveillance:type").orEmpty()
+                val cType = n.tags?.get("camera:type").orEmpty()
+                val mfg = n.tags?.get("manufacturer").orEmpty()
+                val alpr = sType.equals("ALPR", ignoreCase = true) ||
+                    sType.equals("ANPR", ignoreCase = true) ||
+                    cType.equals("ALPR", ignoreCase = true) ||
+                    cType.equals("ANPR", ignoreCase = true) ||
+                    mfg.contains("Flock", ignoreCase = true) ||
+                    mfg.contains("Vigilant", ignoreCase = true) ||
+                    mfg.contains("Genetec", ignoreCase = true)
+                AlprCamera(LatLng(lat, lng), op, dir, isAlpr = alpr)
             }
         }
     }
@@ -181,7 +191,7 @@ object OverpassAlprCameras {
 
     /** True if [p] is within [meters] of any SEGMENT of [polyline] (point-to-segment, not just to a
      *  vertex). Pure/unit-tested. */
-    internal fun nearPolyline(p: LatLng, polyline: List<LatLng>, meters: Double): Boolean {
+    fun nearPolyline(p: LatLng, polyline: List<LatLng>, meters: Double): Boolean {
         for (i in 0 until polyline.size - 1) {
             if (segDistMeters(p, polyline[i], polyline[i + 1]) <= meters) return true
         }

@@ -44,6 +44,7 @@ object LocalBasemapTiles : Interceptor {
                     .addInterceptor(app.vela.core.net.NetHealth.interceptor)
                     .addInterceptor(app.vela.diag.NetCount) // after the local hook too: only what reaches the network
                     .addInterceptor(ReleaseRedirects) // a release file's signed address, kept between range reads
+                    .addInterceptor(app.vela.core.net.GitHubReleaseFallback.interceptor)
                     .build(),
             )
         }.onFailure { installed = false; android.util.Log.w("VelaLocalTiles", "could not install the tile hook: ${it.message}") }

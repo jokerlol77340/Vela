@@ -32,6 +32,14 @@ object MapPoiPrefs {
     val stopSignScale = mutableFloatStateOf(1.0f)
     val railCrossingScale = mutableFloatStateOf(1.0f)
     val speedHumpScale = mutableFloatStateOf(1.0f)
+    /** Individual multipliers for road and map pictograms. */
+    val roadShieldScale = mutableFloatStateOf(1.0f)
+    val exitNumberScale = mutableFloatStateOf(1.0f)
+    val fuelStationScale = mutableFloatStateOf(1.0f)
+    val transitStopScale = mutableFloatStateOf(1.0f)
+    val poiPlaceScale = mutableFloatStateOf(1.0f)
+    val parkingScale = mutableFloatStateOf(1.0f)
+    val savedPinScale = mutableFloatStateOf(1.0f)
     /** Where the businesses on the browse map come from, one of [SOURCE_OPEN] (the Overture places
      *  layer where a region file covers the view, Google only on tap, works offline), [SOURCE_GOOGLE]
      *  (the ambient fan-out on every pan, nothing offline) or [SOURCE_BOTH] (the open layer draws the
@@ -72,6 +80,13 @@ object MapPoiPrefs {
         stopSignScale.floatValue = p.getFloat(KEY_STOP_SCALE, 1.0f)
         railCrossingScale.floatValue = p.getFloat(KEY_RAILX_SCALE, 1.0f)
         speedHumpScale.floatValue = p.getFloat(KEY_HUMP_SCALE, 1.0f)
+        roadShieldScale.floatValue = p.getFloat(KEY_ROAD_SHIELD_SCALE, 1.0f)
+        exitNumberScale.floatValue = p.getFloat(KEY_EXIT_NUMBER_SCALE, 1.0f)
+        fuelStationScale.floatValue = p.getFloat(KEY_FUEL_STATION_SCALE, 1.0f)
+        transitStopScale.floatValue = p.getFloat(KEY_TRANSIT_STOP_SCALE, 1.0f)
+        poiPlaceScale.floatValue = p.getFloat(KEY_POI_PLACE_SCALE, 1.0f)
+        parkingScale.floatValue = p.getFloat(KEY_PARKING_SCALE, 1.0f)
+        savedPinScale.floatValue = p.getFloat(KEY_SAVED_PIN_SCALE, 1.0f)
         explicitSource = p.getString(KEY_PLACES_SOURCE, null)
         placesSource.value = explicitSource ?: remoteDefault
         placesWithDownloads.value = p.getBoolean(KEY_PLACES_WITH_DOWNLOADS, true)
@@ -172,6 +187,41 @@ object MapPoiPrefs {
         prefs(context).edit().putFloat(KEY_HUMP_SCALE, value).apply()
     }
 
+    fun setRoadShieldScale(context: Context, value: Float) {
+        roadShieldScale.floatValue = value
+        prefs(context).edit().putFloat(KEY_ROAD_SHIELD_SCALE, value).apply()
+    }
+
+    fun setExitNumberScale(context: Context, value: Float) {
+        exitNumberScale.floatValue = value
+        prefs(context).edit().putFloat(KEY_EXIT_NUMBER_SCALE, value).apply()
+    }
+
+    fun setFuelStationScale(context: Context, value: Float) {
+        fuelStationScale.floatValue = value
+        prefs(context).edit().putFloat(KEY_FUEL_STATION_SCALE, value).apply()
+    }
+
+    fun setTransitStopScale(context: Context, value: Float) {
+        transitStopScale.floatValue = value
+        prefs(context).edit().putFloat(KEY_TRANSIT_STOP_SCALE, value).apply()
+    }
+
+    fun setPoiPlaceScale(context: Context, value: Float) {
+        poiPlaceScale.floatValue = value
+        prefs(context).edit().putFloat(KEY_POI_PLACE_SCALE, value).apply()
+    }
+
+    fun setParkingScale(context: Context, value: Float) {
+        parkingScale.floatValue = value
+        prefs(context).edit().putFloat(KEY_PARKING_SCALE, value).apply()
+    }
+
+    fun setSavedPinScale(context: Context, value: Float) {
+        savedPinScale.floatValue = value
+        prefs(context).edit().putFloat(KEY_SAVED_PIN_SCALE, value).apply()
+    }
+
     private fun prefs(c: Context) = c.getSharedPreferences("vela_settings", Context.MODE_PRIVATE)
     private const val KEY_POIS = "map_show_pois"
     private const val KEY_TRANSIT = "map_show_transit_stops"
@@ -183,6 +233,13 @@ object MapPoiPrefs {
     private const val KEY_STOP_SCALE = "map_nav_stop_scale"
     private const val KEY_RAILX_SCALE = "map_nav_railx_scale"
     private const val KEY_HUMP_SCALE = "map_nav_hump_scale"
+    private const val KEY_ROAD_SHIELD_SCALE = "map_icon_road_shield_scale"
+    private const val KEY_EXIT_NUMBER_SCALE = "map_icon_exit_number_scale"
+    private const val KEY_FUEL_STATION_SCALE = "map_icon_fuel_station_scale"
+    private const val KEY_TRANSIT_STOP_SCALE = "map_icon_transit_stop_scale"
+    private const val KEY_POI_PLACE_SCALE = "map_icon_poi_place_scale"
+    private const val KEY_PARKING_SCALE = "map_icon_parking_scale"
+    private const val KEY_SAVED_PIN_SCALE = "map_icon_saved_pin_scale"
     private const val KEY_PLACES_SOURCE = "map_places_source"
     private const val KEY_PLACES_WITH_DOWNLOADS = "offline_places_with_downloads"
     private const val KEY_LOOKUP_TAPPED = "map_places_google_lookup"

@@ -2627,47 +2627,81 @@ fun VelaMapView(
     val stopSignScale = app.vela.ui.MapPoiPrefs.stopSignScale.floatValue
     val railCrossingScale = app.vela.ui.MapPoiPrefs.railCrossingScale.floatValue
     val speedHumpScale = app.vela.ui.MapPoiPrefs.speedHumpScale.floatValue
+    val roadShieldScale = app.vela.ui.MapPoiPrefs.roadShieldScale.floatValue
+    val exitNumberScale = app.vela.ui.MapPoiPrefs.exitNumberScale.floatValue
+    val fuelStationScale = app.vela.ui.MapPoiPrefs.fuelStationScale.floatValue
+    val transitStopScale = app.vela.ui.MapPoiPrefs.transitStopScale.floatValue
+    val poiPlaceScale = app.vela.ui.MapPoiPrefs.poiPlaceScale.floatValue
+    val parkingScale = app.vela.ui.MapPoiPrefs.parkingScale.floatValue
+    val savedPinScale = app.vela.ui.MapPoiPrefs.savedPinScale.floatValue
     LaunchedEffect(
         styleRef, poiIconScale, poiLabelScale,
         speedcamScale, flockScale, signalScale, stopSignScale, railCrossingScale, speedHumpScale,
+        roadShieldScale, exitNumberScale, fuelStationScale, transitStopScale, poiPlaceScale, parkingScale, savedPinScale,
     ) {
         val st = styleRef ?: return@LaunchedEffect
         val sc = poiIconScale
         val lc = poiLabelScale
         runCatching {
+            RoadShields.applyScales(st, shieldScale = roadShieldScale, exitScale = exitNumberScale)
+            (st.getLayer(NAV_SHIELD_LAYER) as? SymbolLayer)?.setProperties(
+                PropertyFactory.iconSize(1f * roadShieldScale),
+                PropertyFactory.textSize(11f * roadShieldScale),
+            )
+            (st.getLayer(NAV_EXIT_LAYER) as? SymbolLayer)?.setProperties(
+                PropertyFactory.textSize(13.5f * exitNumberScale),
+            )
+            fun poiProminenceExpr(lowBase: Float, highBase: Float, baseMult: Float): Expression {
+                fun interp(m: Float) = Expression.interpolate(
+                    Expression.linear(), Expression.get("prominence"),
+                    Expression.stop(0.0, lowBase * baseMult * m),
+                    Expression.stop(8.0, highBase * baseMult * m),
+                )
+                return Expression.match(
+                    Expression.get("group"),
+                    Expression.literal("fuel"), interp(fuelStationScale),
+                    Expression.literal("parking"), interp(parkingScale),
+                    interp(poiPlaceScale),
+                )
+            }
+            val poiIconExpr = poiProminenceExpr(0.78f, 1.3f, sc)
+            val poiTextExpr = poiProminenceExpr(11f, 14f, lc)
+            val poiDotExpr = poiProminenceExpr(2.6f, 4.2f, sc)
             st.getLayer(AMBIENT_LAYER)?.setProperties(
-                PropertyFactory.iconSize(
-                    Expression.interpolate(
-                        Expression.linear(), Expression.get("prominence"),
-                        Expression.stop(0.0, 0.78f * sc), Expression.stop(8.0, 1.3f * sc),
-                    ),
-                ),
-                PropertyFactory.textSize(
-                    Expression.interpolate(
-                        Expression.linear(), Expression.get("prominence"),
-                        Expression.stop(0.0, 11f * lc), Expression.stop(8.0, 14f * lc),
-                    ),
-                ),
+                PropertyFactory.iconSize(poiIconExpr),
+                PropertyFactory.textSize(poiTextExpr),
             )
             st.getLayer(AMBIENT_DOT_LAYER)?.setProperties(
-                PropertyFactory.circleRadius(
-                    Expression.interpolate(
-                        Expression.linear(), Expression.get("prominence"),
-                        Expression.stop(0.0, 2.6f * sc), Expression.stop(8.0, 4.2f * sc),
-                    ),
-                ),
+                PropertyFactory.circleRadius(poiDotExpr),
+            )
+            val openPoiDotExpr = poiProminenceExpr(2.2f, 3.6f, sc)
+            st.layers.forEach { l ->
+                when {
+                    l.id.startsWith("vela-places-dots-") -> l.setProperties(PropertyFactory.circleRadius(openPoiDotExpr))
+                    l.id.startsWith("vela-places-") -> l.setProperties(PropertyFactory.iconSize(poiIconExpr))
+                }
+            }
+            val osmPoiSize = Expression.match(
+                Expression.get("class"),
+                Expression.literal("fuel"), Expression.literal(0.8f * sc * fuelStationScale),
+                Expression.literal("parking"), Expression.literal(0.8f * sc * parkingScale),
+                Expression.literal(0.8f * sc * poiPlaceScale),
             )
             listOf("poi_r1", "poi_r7", "poi_r20").forEach { id ->
-                st.getLayer(id)?.setProperties(PropertyFactory.iconSize(0.8f * sc))
+                st.getLayer(id)?.setProperties(PropertyFactory.iconSize(osmPoiSize))
             }
+            val trSc = sc * transitStopScale
             st.getLayer(TRANSIT_STOPS_LAYER)?.setProperties(
                 PropertyFactory.iconSize(
                     Expression.interpolate(
                         Expression.linear(), Expression.zoom(),
-                        Expression.stop(15f, 0.78f * sc), Expression.stop(17f, 1.1f * sc), Expression.stop(19f, 1.4f * sc),
+                        Expression.stop(15f, 0.78f * trSc), Expression.stop(17f, 1.1f * trSc), Expression.stop(19f, 1.4f * trSc),
                     ),
                 ),
-                PropertyFactory.textSize(10.5f * lc),
+                PropertyFactory.textSize(10.5f * lc * transitStopScale),
+            )
+            st.getLayer(PARKING_LAYER)?.setProperties(
+                PropertyFactory.iconSize(sc * parkingScale),
             )
             val controlsScaled = controlsSizeExpression(
                 baseScale = sc,
@@ -2678,20 +2712,13 @@ fun VelaMapView(
             )
             st.getLayer(CONTROLS_LAYER)?.setProperties(PropertyFactory.iconSize(controlsScaled))
             st.getLayer(CONTROLS_CLAIM_LAYER)?.setProperties(PropertyFactory.iconSize(controlsScaled))
-            // Layers the first cut MISSED (2026-07-20, car-screen report "POIs still a bit large
-            // sometimes"): search-result pins/rating bubbles, the collapsed result dots, saved-place
-            // pins and the flock badges all kept their fixed-px size while everything around them
-            // shrank - on a low-density head unit exactly these (a gas search, a saved spot) were
-            // the "sometimes" giants. Base values mirror layer creation; keep them in lockstep.
+            val pinSc = sc * savedPinScale
             st.getLayer(MARKERS_LAYER)?.setProperties(
-                PropertyFactory.iconSize(1.15f * sc),
-                PropertyFactory.textSize(13f * lc),
+                PropertyFactory.iconSize(1.15f * pinSc),
+                PropertyFactory.textSize(13f * lc * savedPinScale),
             )
-            st.getLayer(MARKERS_DOTS_LAYER)?.setProperties(PropertyFactory.iconSize(sc))
-            // 1.35x: measured on the Davis fixture at browse zoom, a typical POI icon's disc is 65 px
-            // on screen and a prominent one 77; the list pin was 48 at 1x and 60 at 1.25x, so it read
-            // smaller than every icon beside it (issue #618). 1.35x puts its ringed disc at 65.
-            st.getLayer(SAVED_LAYER)?.setProperties(PropertyFactory.iconSize(savedPinSize(sc)))
+            st.getLayer(MARKERS_DOTS_LAYER)?.setProperties(PropertyFactory.iconSize(pinSc))
+            st.getLayer(SAVED_LAYER)?.setProperties(PropertyFactory.iconSize(savedPinSize(pinSc)))
             val flockSc = sc * flockScale
             val flockScaled = Expression.interpolate(
                 Expression.linear(), Expression.zoom(),
@@ -7063,11 +7090,12 @@ private const val NAV_SHIELD_LAYER = "vela-nav-shields" // "vela-nav-": kept thr
 private fun ensureNavShieldLayer(style: Style) {
     if (style.getSource(NAV_SHIELD_SRC) == null) style.addSource(GeoJsonSource(NAV_SHIELD_SRC))
     if (style.getLayer(NAV_SHIELD_LAYER) != null) return
+    val rsScale = app.vela.ui.MapPoiPrefs.roadShieldScale.floatValue
     val layer = SymbolLayer(NAV_SHIELD_LAYER, NAV_SHIELD_SRC).withProperties(
         PropertyFactory.iconImage(Expression.get("icon")),
-        PropertyFactory.iconSize(1f),
+        PropertyFactory.iconSize(1f * rsScale),
         PropertyFactory.textField(Expression.get("text")),
-        PropertyFactory.textSize(11f),
+        PropertyFactory.textSize(11f * rsScale),
         PropertyFactory.textFont(arrayOf("Noto Sans Bold")),
         PropertyFactory.textHaloWidth(0f),
         PropertyFactory.textColor(
@@ -7516,11 +7544,12 @@ private fun ensureNavRoadLabels(style: Style, on: Boolean, dark: Boolean, densit
     // updates per maneuver without touching the cross-street set.
     if (style.getSource(NAV_EXIT_SRC) == null) style.addSource(GeoJsonSource(NAV_EXIT_SRC))
     if (style.getLayer(NAV_EXIT_LAYER) == null) {
+        val exScale = app.vela.ui.MapPoiPrefs.exitNumberScale.floatValue
         style.addLayer(
             SymbolLayer(NAV_EXIT_LAYER, NAV_EXIT_SRC).withProperties(
                 PropertyFactory.textField(Expression.get("name")),
                 PropertyFactory.textFont(arrayOf("Noto Sans Regular")),
-                PropertyFactory.textSize(13.5f),
+                PropertyFactory.textSize(13.5f * exScale),
                 PropertyFactory.textColor("#FFFFFF"),
                 PropertyFactory.symbolPlacement(Property.SYMBOL_PLACEMENT_POINT),
                 PropertyFactory.textRotationAlignment(Property.TEXT_ROTATION_ALIGNMENT_VIEWPORT),
@@ -10790,7 +10819,7 @@ private fun routeDotBitmap(): Bitmap {
     return bmp
 }
 
-private fun pinBitmap(): Bitmap {
+internal fun pinBitmap(): Bitmap {
     val w = 60
     val h = 80
     val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
@@ -10845,7 +10874,7 @@ private fun svConeBitmap(): Bitmap {
     return bmp
 }
 
-private fun parkingBitmap(): Bitmap {
+internal fun parkingBitmap(): Bitmap {
     val w = 60
     val h = 80
     val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
@@ -11065,7 +11094,7 @@ internal fun stopKind(modes: List<String>): String {
     }
 }
 
-private fun transitStopBitmap(): Bitmap {
+internal fun transitStopBitmap(): Bitmap {
     val s = 40
     val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
     val c = Canvas(bmp)

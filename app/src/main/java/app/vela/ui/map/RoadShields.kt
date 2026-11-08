@@ -66,9 +66,11 @@ internal object RoadShields {
         for ((n, w) in EXIT_WIDTHS) {
             style.addImage("vela-exit_$n", pill(w, d, 16f, fill = 0xFF1E7B45.toInt(), edge = 0xFFFFFFFF.toInt()))
         }
+        val sScale = app.vela.ui.MapPoiPrefs.roadShieldScale.floatValue
+        val eScale = app.vela.ui.MapPoiPrefs.exitNumberScale.floatValue
         val common = arrayOf(
-            PropertyFactory.iconSize(1f),
-            PropertyFactory.textSize(11f),
+            PropertyFactory.iconSize(1f * sScale),
+            PropertyFactory.textSize(11f * sScale),
             PropertyFactory.textFont(arrayOf("Noto Sans Bold")),
             PropertyFactory.textHaloWidth(0f),
         )
@@ -106,9 +108,9 @@ internal object RoadShields {
                 )
                 .withProperties(
                     PropertyFactory.iconImage(Expression.concat(Expression.literal("vela-exit_"), Expression.toString(Expression.get("ref_length")))),
-                    PropertyFactory.iconSize(1f),
+                    PropertyFactory.iconSize(1f * eScale),
                     PropertyFactory.textField(Expression.toString(Expression.get("ref"))),
-                    PropertyFactory.textSize(9.5f),
+                    PropertyFactory.textSize(9.5f * eScale),
                     PropertyFactory.textFont(arrayOf("Noto Sans Bold")),
                     PropertyFactory.textColor("#FFFFFF"),
                     PropertyFactory.textHaloWidth(0f),
@@ -121,6 +123,48 @@ internal object RoadShields {
                 ).apply { minZoom = 12.5f }
             if (style.getLayer("road_shield_us") != null) style.addLayerAbove(layer, "road_shield_us") else style.addLayer(layer)
         }
+    }
+
+    fun applyScales(style: Style, shieldScale: Float, exitScale: Float) {
+        val shieldProps = arrayOf(
+            PropertyFactory.iconSize(1f * shieldScale),
+            PropertyFactory.textSize(11f * shieldScale),
+        )
+        (style.getLayer("highway-shield-us-interstate") as? SymbolLayer)?.setProperties(*shieldProps)
+        (style.getLayer("road_shield_us") as? SymbolLayer)?.setProperties(*shieldProps)
+        (style.getLayer("highway-shield-non-us") as? SymbolLayer)?.setProperties(*shieldProps)
+        (style.getLayer(EXIT_LAYER) as? SymbolLayer)?.setProperties(
+            PropertyFactory.iconSize(1f * exitScale),
+            PropertyFactory.textSize(9.5f * exitScale),
+        )
+    }
+
+    fun previewShieldBitmap(d: Float = 2.5f): Bitmap {
+        val bmp = pill(27f, d, H - 3f, fill = 0xFF1F5AA8.toInt(), edge = 0xFFFFFFFF.toInt())
+        val c = Canvas(bmp)
+        val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFFFFFFF.toInt()
+            textSize = 11f * d
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            textAlign = Paint.Align.CENTER
+        }
+        val y = bmp.height / 2f - (tp.descent() + tp.ascent()) / 2f
+        c.drawText("A6", bmp.width / 2f, y, tp)
+        return bmp
+    }
+
+    fun previewExitBitmap(d: Float = 2.5f): Bitmap {
+        val bmp = pill(23f, d, 16f, fill = 0xFF1E7B45.toInt(), edge = 0xFFFFFFFF.toInt())
+        val c = Canvas(bmp)
+        val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFFFFFFF.toInt()
+            textSize = 9.5f * d
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            textAlign = Paint.Align.CENTER
+        }
+        val y = bmp.height / 2f - (tp.descent() + tp.ascent()) / 2f
+        c.drawText("14", bmp.width / 2f, y, tp)
+        return bmp
     }
 
     /** The interstate / US-route silhouette: flat top, straight sides, rounded point below. */

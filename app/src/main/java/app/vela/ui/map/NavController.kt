@@ -1147,19 +1147,19 @@ internal class NavController(
         routeCamMeters = emptyList()
         routeCamJob?.cancel()
         routeCamJob = scope.launch {
-            val cams = when (host.roadFeaturesCoverRoute(poly)) {
-                MapViewModel.RoadCover.LOADED -> withContext(Dispatchers.Default) { app.vela.data.RoadFeatures.camerasAlong(poly, 150.0) }
-                MapViewModel.RoadCover.FAILED -> null
-                MapViewModel.RoadCover.NONE -> runCatching {
-                    withContext(Dispatchers.IO) {
-                        app.vela.core.data.OverpassSpeedCameras.fetchAlongCorridor(http, poly)
-                    }
-                }.getOrNull()
-            } ?: run {
-                // Leave the key set: a failed fetch means no warnings this route rather than a
-                // retry storm mid-drive. The map layer still draws from the viewport path.
-                android.util.Log.i("VelaSpeedCam", "route corridor camera fetch FAILED (all endpoints)")
-                return@launch
+            app.vela.data.BundledSpeedCameras.ensureLoaded(appContext)
+            val bundled = withContext(Dispatchers.Default) { app.vela.data.BundledSpeedCameras.along(poly, 150.0) }
+            val cover = host.roadFeaturesCoverRoute(poly)
+            val baked = if (cover == MapViewModel.RoadCover.LOADED) {
+                withContext(Dispatchers.Default) { app.vela.data.RoadFeatures.camerasAlong(poly, 150.0) }
+            } else emptyList()
+            val live = runCatching {
+                withContext(Dispatchers.IO) {
+                    app.vela.core.data.OverpassSpeedCameras.fetchAlongCorridor(http, poly)
+                }
+            }.getOrNull().orEmpty()
+            val cams = withContext(Dispatchers.Default) {
+                app.vela.data.BundledSpeedCameras.mergeAndDedupe(bundled, baked, live)
             }
             val meters = withContext(Dispatchers.Default) {
                 val cum = app.vela.core.nav.RouteProjection.cumulative(poly)
@@ -1215,8 +1215,13 @@ internal class NavController(
             var waited = 0
             while (!app.vela.data.FlockCameras.isLoaded && waited < 60) { kotlinx.coroutines.delay(1000); waited++ }
             if (!app.vela.data.FlockCameras.isLoaded) return@launch
+            val liveAlpr = runCatching {
+                withContext(Dispatchers.IO) {
+                    app.vela.core.data.OverpassAlprCameras.fetchAlong(http, poly, nearMeters = 45.0)
+                }
+            }.getOrDefault(emptyList())
             val groups = withContext(Dispatchers.Default) {
-                val cams = app.vela.data.FlockCameras.along(poly)
+                val cams = app.vela.data.FlockCameras.mergeAndDedupe(app.vela.data.FlockCameras.along(poly), liveAlpr)
                 val cum = app.vela.core.nav.RouteProjection.cumulative(poly)
                 val meters = cams.mapNotNull { app.vela.core.nav.RouteProjection.alongMeters(poly, cum, it.loc, 45.0) }.sorted()
                 app.vela.core.nav.CameraAlerts.group(meters)

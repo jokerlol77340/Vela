@@ -134,7 +134,7 @@ object FlockCameras {
     }
 
     private val downloadHttp: OkHttpClient by lazy {
-        OkHttpClient.Builder().callTimeout(0, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build()
+        OkHttpClient.Builder().callTimeout(0, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).addInterceptor(app.vela.core.net.GitHubReleaseFallback.interceptor).build()
     }
 
     /**
@@ -187,6 +187,69 @@ object FlockCameras {
                 c++
             }
             r++
+        }
+        return out
+    }
+
+    /**
+     * Combines multiple ALPR / surveillance camera lists (`FlockCameras` + `OverpassAlprCameras`)
+     * and removes spatial duplicates within [radiusM] (default 35 m), preserving richer metadata
+     * (`operator`, `direction`, and `isAlpr = true` if either source identifies it as ALPR).
+     */
+    fun mergeAndDedupe(vararg lists: List<AlprCamera>, radiusM: Double = 35.0): List<AlprCamera> {
+        val total = lists.sumOf { it.size }
+        if (total == 0) return emptyList()
+        val cellDeg = 0.002 // ~220 m
+        val r2 = radiusM * radiusM
+        val out = ArrayList<AlprCamera>(total)
+        val spatial = HashMap<Long, MutableList<Int>>()
+
+        fun cellKey(r: Long, c: Long): Long = (r shl 32) xor (c and 0xffffffffL)
+
+        for (list in lists) {
+            for (cam in list) {
+                val la = cam.loc.lat
+                val lo = cam.loc.lng
+                val cr = Math.floor(la / cellDeg).toLong()
+                val cc = Math.floor(lo / cellDeg).toLong()
+                val cosLat = Math.cos(Math.toRadians(la))
+                val mPerDegLat = 111_132.0
+                val mPerDegLng = 111_320.0 * cosLat
+                var matchIdx = -1
+                var dr = -1L
+                while (dr <= 1L && matchIdx < 0) {
+                    var dc = -1L
+                    while (dc <= 1L) {
+                        spatial[cellKey(cr + dr, cc + dc)]?.let { bucket ->
+                            for (idx in bucket) {
+                                val existing = out[idx]
+                                val dy = (la - existing.loc.lat) * mPerDegLat
+                                val dx = (lo - existing.loc.lng) * mPerDegLng
+                                if (dx * dx + dy * dy <= r2) {
+                                    matchIdx = idx
+                                    break
+                                }
+                            }
+                        }
+                        if (matchIdx >= 0) break
+                        dc++
+                    }
+                    dr++
+                }
+                if (matchIdx < 0) {
+                    val newIdx = out.size
+                    out.add(cam)
+                    spatial.getOrPut(cellKey(cr, cc)) { ArrayList(2) }.add(newIdx)
+                } else {
+                    val existing = out[matchIdx]
+                    val mergedOp = existing.operator.ifEmpty { cam.operator }
+                    val mergedDir = existing.direction.ifEmpty { cam.direction }
+                    val mergedAlpr = existing.isAlpr || cam.isAlpr
+                    if (mergedOp != existing.operator || mergedDir != existing.direction || mergedAlpr != existing.isAlpr) {
+                        out[matchIdx] = AlprCamera(existing.loc, mergedOp, mergedDir, mergedAlpr)
+                    }
+                }
+            }
         }
         return out
     }

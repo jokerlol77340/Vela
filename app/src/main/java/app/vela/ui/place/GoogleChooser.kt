@@ -463,7 +463,7 @@ fun GoogleStyleDirectionsPanel(
                             Box(Modifier.padding(horizontal = 16.dp)) {
                                 DepartTimeChooser(route, dim, isTransit = false, onTimeSelected = onTimeSelected)
                             }
-                            if (currentMode == TravelMode.DRIVE) {
+                            if (currentMode == TravelMode.DRIVE || currentMode == TravelMode.WALK || currentMode == TravelMode.BICYCLE) {
                                 Row(
                                     Modifier.horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 8.dp),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -472,27 +472,29 @@ fun GoogleStyleDirectionsPanel(
                                     // One "Avoid" label and four short chips: with "Avoid" on every
                                     // chip the fourth sat off the edge of a phone, unseen.
                                     Text(stringResource(R.string.place_avoid_label), style = MaterialTheme.typography.labelLarge, color = dim)
-                                    FilterChip(
-                                        selected = avoidTolls, onClick = { onAvoidTolls(!avoidTolls) },
-                                        label = { Text(stringResource(R.string.place_avoid_short_tolls)) },
-                                        shape = CircleShape,
-                                        modifier = Modifier.dpadHighlight(CircleShape),
-                                    )
-                                    FilterChip(
-                                        selected = avoidHighways, onClick = { onAvoidHighways(!avoidHighways) },
-                                        label = { Text(stringResource(R.string.place_avoid_short_highways)) },
-                                        shape = CircleShape,
-                                        modifier = Modifier.dpadHighlight(CircleShape),
-                                    )
-                                    FilterChip(
-                                        selected = avoidFerries, onClick = { onAvoidFerries(!avoidFerries) },
-                                        label = { Text(stringResource(R.string.place_avoid_short_ferries)) },
-                                        shape = CircleShape,
-                                        modifier = Modifier.dpadHighlight(CircleShape),
-                                    )
-                                    AvoidCamerasChip()
+                                    if (currentMode == TravelMode.DRIVE) {
+                                        FilterChip(
+                                            selected = avoidTolls, onClick = { onAvoidTolls(!avoidTolls) },
+                                            label = { Text(stringResource(R.string.place_avoid_short_tolls)) },
+                                            shape = CircleShape,
+                                            modifier = Modifier.dpadHighlight(CircleShape),
+                                        )
+                                        FilterChip(
+                                            selected = avoidHighways, onClick = { onAvoidHighways(!avoidHighways) },
+                                            label = { Text(stringResource(R.string.place_avoid_short_highways)) },
+                                            shape = CircleShape,
+                                            modifier = Modifier.dpadHighlight(CircleShape),
+                                        )
+                                        FilterChip(
+                                            selected = avoidFerries, onClick = { onAvoidFerries(!avoidFerries) },
+                                            label = { Text(stringResource(R.string.place_avoid_short_ferries)) },
+                                            shape = CircleShape,
+                                            modifier = Modifier.dpadHighlight(CircleShape),
+                                        )
+                                    }
+                                    AvoidCamerasChip(mode = currentMode)
                                 }
-                                if ((avoidTolls || avoidHighways || avoidFerries) && routes.isNotEmpty() && routes.all { it.avoidNotHonored }) {
+                                if (currentMode == TravelMode.DRIVE && (avoidTolls || avoidHighways || avoidFerries) && routes.isNotEmpty() && routes.all { it.avoidNotHonored }) {
                                     Row(Modifier.padding(start = 20.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
                                         Icon(SymOutlined.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                                         Spacer(Modifier.width(8.dp))
@@ -696,17 +698,49 @@ internal fun SavedRouteChip(name: String, modifier: Modifier = Modifier) {
  *  list with no way to say "not this time" where the other avoid options are). Same switch, same
  *  stickiness as the tolls, highways and ferries chips beside it. */
 @Composable
-internal fun AvoidCamerasChip() {
+internal fun AvoidCamerasChip(mode: TravelMode = TravelMode.DRIVE) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val on = app.vela.ui.FlockRouteAlert.on.value
-    FilterChip(
-        selected = on,
-        onClick = {
-            app.vela.ui.FlockRouteAlert.set(context, !on)
-            app.vela.ui.RouteActions.camerasChanged?.invoke()
-        },
-        label = { Text(stringResource(R.string.place_avoid_short_cameras)) },
-        shape = CircleShape,
-        modifier = Modifier.dpadHighlight(CircleShape),
-    )
+    val currentType = app.vela.ui.FlockRouteAlert.typeFor(mode)
+    var menuOpen by remember { mutableStateOf(false) }
+    val labelRes = when (currentType) {
+        app.vela.ui.CameraAvoidType.NONE -> R.string.place_avoid_short_cameras
+        app.vela.ui.CameraAvoidType.ALPR_ONLY -> R.string.place_avoid_cameras_alpr
+        app.vela.ui.CameraAvoidType.SURVEILLANCE_ONLY -> R.string.place_avoid_cameras_surv
+        app.vela.ui.CameraAvoidType.ALL_CAMERAS -> R.string.place_avoid_cameras_all
+    }
+    Box {
+        FilterChip(
+            selected = currentType != app.vela.ui.CameraAvoidType.NONE,
+            onClick = { menuOpen = true },
+            label = { Text(stringResource(labelRes)) },
+            shape = CircleShape,
+            modifier = Modifier.dpadHighlight(CircleShape),
+        )
+        androidx.compose.material3.DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+        ) {
+            val options = listOf(
+                app.vela.ui.CameraAvoidType.NONE to R.string.camera_avoid_none,
+                app.vela.ui.CameraAvoidType.ALPR_ONLY to R.string.camera_avoid_alpr_only,
+                app.vela.ui.CameraAvoidType.SURVEILLANCE_ONLY to R.string.camera_avoid_surveillance_only,
+                app.vela.ui.CameraAvoidType.ALL_CAMERAS to R.string.camera_avoid_all,
+            )
+            options.forEach { (type, textRes) ->
+                androidx.compose.material3.DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(textRes),
+                            fontWeight = if (currentType == type) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    },
+                    onClick = {
+                        menuOpen = false
+                        app.vela.ui.FlockRouteAlert.setTypeFor(context, mode, type)
+                        app.vela.ui.RouteActions.camerasChanged?.invoke()
+                    },
+                )
+            }
+        }
+    }
 }
