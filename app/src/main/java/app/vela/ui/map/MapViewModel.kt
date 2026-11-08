@@ -9917,7 +9917,7 @@ class MapViewModel @Inject constructor(
                 app.vela.data.BundledSpeedCameras.mergeAndDedupe(instantRoute, instantBox)
             }
             if (initial.isNotEmpty()) {
-                _state.update { it.copy(speedCameras = initial.take(800)) }
+                _state.update { it.copy(speedCameras = initial) }
             }
             delay(250)
             val bakedRoute = if (shown.isNotEmpty()) {
@@ -9948,20 +9948,9 @@ class MapViewModel @Inject constructor(
             val merged = withContext(Dispatchers.Default) {
                 app.vela.data.BundledSpeedCameras.mergeAndDedupe(initial, bakedRoute, bakedBox, liveBox, liveRoute)
             }
-            val cap = 8_000
-            val keptSpeedCams = if (merged.size <= cap) merged else {
-                val step = merged.size.toDouble() / cap
-                val out = ArrayList<app.vela.core.data.SpeedCamera>(cap)
-                var i = 0.0
-                while (i < merged.size && out.size < cap) {
-                    out.add(merged[i.toInt()])
-                    i += step
-                }
-                out
-            }
             speedCamBox = doubleArrayOf(s, w, n, e)
-            diag.record("speedcam", "showing ${keptSpeedCams.size} camera(s) at z${"%.1f".format(zoom)}", "multi-source")
-            _state.update { it.copy(speedCameras = keptSpeedCams) }
+            diag.record("speedcam", "showing ${merged.size} camera(s) at z${"%.1f".format(zoom)}", "multi-source")
+            _state.update { it.copy(speedCameras = merged) }
         }
     }
 
@@ -10343,18 +10332,9 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    /** Cap the drawn cameras uniformly across the viewport so large views (e.g. z8) don't drop outer regions. */
+    /** Return all drawn cameras across the viewport without limit. */
     private fun capFlock(res: List<app.vela.core.data.AlprCamera>, s: Double, n: Double, w: Double, e: Double): List<app.vela.core.data.AlprCamera> {
-        val cap = 12_000
-        if (res.size <= cap) return res
-        val step = res.size.toDouble() / cap
-        val out = ArrayList<app.vela.core.data.AlprCamera>(cap)
-        var i = 0.0
-        while (i < res.size && out.size < cap) {
-            out.add(res[i.toInt()])
-            i += step
-        }
-        return out
+        return res
     }
 
     // --- Offline ROUTING graphs (Settings → Offline routing) ---------------------------------
