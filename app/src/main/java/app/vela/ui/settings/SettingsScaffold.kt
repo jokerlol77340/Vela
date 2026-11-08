@@ -4,6 +4,7 @@ import app.vela.ui.icons.Sym
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -65,6 +66,7 @@ internal fun SettingsScaffold(
     title: String,
     onBack: () -> Unit,
     autoFocusBack: Boolean = true,
+    scrollable: Boolean = true,
     content: @Composable ColumnScope.(topRow: Modifier) -> Unit,
 ) {
     val backFocus = remember { FocusRequester() }
@@ -143,6 +145,7 @@ internal fun SettingsScaffold(
         Column(
             Modifier
                 .padding(padding)
+                .fillMaxSize()
                 .onFocusEvent { contentHasFocus = it.hasFocus }
                 .dpadSwallowHorizontal()
                 // A DOWN past the last control (or stray UP) must never CLEAR focus - the vertical
@@ -155,7 +158,7 @@ internal fun SettingsScaffold(
                         true
                     } else false
                 }
-                .verticalScroll(rememberScrollState())
+                .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                 .padding(horizontal = 16.dp),
         ) {
             // 44dp minimum interactive size for every Material control on Settings pages: the

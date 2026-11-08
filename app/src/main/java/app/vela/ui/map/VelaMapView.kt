@@ -329,6 +329,10 @@ private const val NAV_OVL_TICK_MS = 4000L // then how often the drive asks (a no
 
 private const val CONTROLS_SRC = "vela-controls-src" // OSM traffic lights + stop signs drawn at high zoom
 private const val CONTROLS_LAYER = "vela-controls"
+private const val CONTROLS_SIGNAL_LAYER = "vela-controls-signal"
+private const val CONTROLS_STOP_LAYER = "vela-controls-stop"
+private const val CONTROLS_RAILX_LAYER = "vela-controls-railx"
+private const val CONTROLS_HUMP_LAYER = "vela-controls-hump"
 private const val CONTROLS_CLAIM_LAYER = "vela-controls-claim" // invisible collision box over the labels
 private const val SIGNAL_IMG = "vela-signal"
 private const val STOP_IMG = "vela-stop"
@@ -1735,6 +1739,17 @@ fun VelaMapView(
         // scale bar reads about 50 ft, Google's level. The fetch stays at 16, so they are already
         // loaded when the zoom reaches them.
         runCatching {
+            fun resolveCtrlMinZ(prefVal: Float): Float = when {
+                prefVal in 0.001f..0.05f -> 0f
+                prefVal > 0.05f -> prefVal
+                navMode -> 15.4f
+                else -> CONTROLS_BROWSE_SHOW_ZOOM
+            }
+            style.getLayer(CONTROLS_SIGNAL_LAYER)?.minZoom = resolveCtrlMinZ(app.vela.ui.MapPoiPrefs.signalMinZoom.floatValue)
+            style.getLayer(CONTROLS_STOP_LAYER)?.minZoom = resolveCtrlMinZ(app.vela.ui.MapPoiPrefs.stopSignMinZoom.floatValue)
+            style.getLayer(CONTROLS_RAILX_LAYER)?.minZoom = resolveCtrlMinZ(app.vela.ui.MapPoiPrefs.railCrossingMinZoom.floatValue)
+            style.getLayer(CONTROLS_HUMP_LAYER)?.minZoom = resolveCtrlMinZ(app.vela.ui.MapPoiPrefs.speedHumpMinZoom.floatValue)
+
             val ctrlMinPrefs = listOf(
                 app.vela.ui.MapPoiPrefs.signalMinZoom.floatValue,
                 app.vela.ui.MapPoiPrefs.stopSignMinZoom.floatValue,
@@ -3026,6 +3041,25 @@ fun VelaMapView(
                 railxShow = effRailxShow, railxMinZoom = railCrossingMinZoom,
                 humpShow = effHumpShow, humpMinZoom = speedHumpMinZoom,
             )
+            fun updateCtrl(layerId: String, effShow: Boolean, scale: Float, minZoom: Float) {
+                val l = st.getLayer(layerId) ?: return
+                val z = when {
+                    minZoom in 0.001f..0.05f -> 0f
+                    minZoom > 0.05f -> minZoom
+                    else -> null
+                }
+                if (z != null) l.minZoom = z
+                l.setProperties(
+                    PropertyFactory.visibility(if (effShow && scale > 0f) Property.VISIBLE else Property.NONE),
+                    PropertyFactory.iconSize(singleControlSizeExpression(sc, if (effShow) scale else 0.0001f)),
+                    PropertyFactory.iconOpacity(if (effShow) 1f else 0f),
+                )
+            }
+            updateCtrl(CONTROLS_SIGNAL_LAYER, effSignalShow, signalScale, signalMinZoom)
+            updateCtrl(CONTROLS_STOP_LAYER, effStopShow, stopSignScale, stopSignMinZoom)
+            updateCtrl(CONTROLS_RAILX_LAYER, effRailxShow, railCrossingScale, railCrossingMinZoom)
+            updateCtrl(CONTROLS_HUMP_LAYER, effHumpShow, speedHumpScale, speedHumpMinZoom)
+
             listOf(CONTROLS_LAYER, CONTROLS_CLAIM_LAYER).forEach { id ->
                 val l = st.getLayer(id) ?: return@forEach
                 fun ctrlZ(z: Float): Float? = when {
@@ -6885,33 +6919,51 @@ private fun ensureLayers(style: Style, painted: Boolean) {
         // where the visible icons paint. They still always draw (allowOverlap + ignorePlacement):
         // sparse, one per junction.
         val firstSymbol = style.layers.firstOrNull { it is SymbolLayer }?.id
+        val ctrlDefs = listOf(
+            Triple(CONTROLS_SIGNAL_LAYER, SIGNAL_IMG, app.vela.ui.MapPoiPrefs.signalScale.floatValue),
+            Triple(CONTROLS_STOP_LAYER, STOP_IMG, app.vela.ui.MapPoiPrefs.stopSignScale.floatValue),
+            Triple(CONTROLS_RAILX_LAYER, RAILX_IMG, app.vela.ui.MapPoiPrefs.railCrossingScale.floatValue),
+            Triple(CONTROLS_HUMP_LAYER, HUMP_IMG, app.vela.ui.MapPoiPrefs.speedHumpScale.floatValue),
+        )
+        val createdLayers = ctrlDefs.map { (layerId, iconImg, scale) ->
+            SymbolLayer(layerId, CONTROLS_SRC).apply {
+                setMinZoom(16f)
+                setFilter(Expression.eq(Expression.get("icon"), Expression.literal(iconImg)))
+                setProperties(
+                    PropertyFactory.iconImage(iconImg),
+                    PropertyFactory.iconSize(singleControlSizeExpression(1f, scale)),
+                    PropertyFactory.iconAllowOverlap(true),
+                    PropertyFactory.iconIgnorePlacement(true),
+                    PropertyFactory.iconPadding(2f),
+                    PropertyFactory.iconOffset(
+                        Expression.switchCase(
+                            Expression.has(CONTROL_NUDGE_PROP), Expression.literal(arrayOf(-12f, 12f)),
+                            Expression.literal(arrayOf(0f, 0f)),
+                        ),
+                    ),
+                )
+            }
+        }
         val visible = SymbolLayer(CONTROLS_LAYER, CONTROLS_SRC).apply {
             setMinZoom(16f)
             setProperties(
                 PropertyFactory.iconImage(Expression.get("icon")),
-                // Zoom-scaled so they read at nav zoom (~16-17.5) and grow as you zoom in — the flat 0.55
-                // was too small to spot, especially tilted in nav (user 2026-07-06 wanted them bigger).
                 PropertyFactory.iconSize(controlsSize),
+                PropertyFactory.iconOpacity(0f),
                 PropertyFactory.iconAllowOverlap(true),
                 PropertyFactory.iconIgnorePlacement(true),
-PropertyFactory.iconPadding(2f),
-                PropertyFactory.iconOffset(
-                    Expression.switchCase(
-                        Expression.has(CONTROL_NUDGE_PROP), Expression.literal(arrayOf(-12f, 12f)),
-                        Expression.literal(arrayOf(0f, 0f)),
-                    ),
-                ),
+                PropertyFactory.iconPadding(2f),
             )
         }
-        // Above the CUT piece too (the 400 m of route around the arrow, drawn over the ahead line):
-        // anchored on the ahead line alone, the lights and stops nearest the driver were exactly
-        // the ones painted over (user drive 2026-09-16).
-        when {
-            style.getLayer(ROUTE_CUT_LAYER_B) != null -> style.addLayerAbove(visible, ROUTE_CUT_LAYER_B)
-            style.getLayer(ROUTE_CUT_LAYER) != null -> style.addLayerAbove(visible, ROUTE_CUT_LAYER)
-            style.getLayer(ROUTE_AHEAD_LAYER) != null -> style.addLayerAbove(visible, ROUTE_AHEAD_LAYER)
-            firstSymbol != null -> style.addLayerBelow(visible, firstSymbol)
-            else -> style.addLayerBelow(visible, AMBIENT_LAYER)
+        val allControlsVisible = createdLayers + visible
+        allControlsVisible.forEach { lyr ->
+            when {
+                style.getLayer(ROUTE_CUT_LAYER_B) != null -> style.addLayerAbove(lyr, ROUTE_CUT_LAYER_B)
+                style.getLayer(ROUTE_CUT_LAYER) != null -> style.addLayerAbove(lyr, ROUTE_CUT_LAYER)
+                style.getLayer(ROUTE_AHEAD_LAYER) != null -> style.addLayerAbove(lyr, ROUTE_AHEAD_LAYER)
+                firstSymbol != null -> style.addLayerBelow(lyr, firstSymbol)
+                else -> style.addLayerBelow(lyr, AMBIENT_LAYER)
+            }
         }
         // An INVISIBLE claim twin sits where the visible layer used to (above the basemap
         // labels, below Vela's own pins/POIs): it places first with a real collision box, so
@@ -11085,7 +11137,37 @@ private fun applyData(
     // Stop signs + traffic lights step aside during a search too (results are the subject; the
     // junction furniture reads as clutter behind them) — but UNLIKE the basemap POIs they stay
     // up alongside the ambient dots on the browse map, so this keys on the result set alone.
-    val controlsVis = if (markers.size > 1) Property.NONE else Property.VISIBLE
+    val searchHide = markers.size > 1
+    fun resolveCtrlVis(showInNav: Boolean, showInMap: Boolean, scale: Float): String {
+        if (searchHide || scale <= 0f) return Property.NONE
+        val enabled = if (navMode) showInNav else showInMap
+        return if (enabled) Property.VISIBLE else Property.NONE
+    }
+    style.getLayer(CONTROLS_SIGNAL_LAYER)?.setProperties(
+        PropertyFactory.visibility(resolveCtrlVis(app.vela.ui.MapPoiPrefs.signalShowInNav.value, app.vela.ui.MapPoiPrefs.signalShowInMap.value, app.vela.ui.MapPoiPrefs.signalScale.floatValue))
+    )
+    style.getLayer(CONTROLS_STOP_LAYER)?.setProperties(
+        PropertyFactory.visibility(resolveCtrlVis(app.vela.ui.MapPoiPrefs.stopSignShowInNav.value, app.vela.ui.MapPoiPrefs.stopSignShowInMap.value, app.vela.ui.MapPoiPrefs.stopSignScale.floatValue))
+    )
+    style.getLayer(CONTROLS_RAILX_LAYER)?.setProperties(
+        PropertyFactory.visibility(resolveCtrlVis(app.vela.ui.MapPoiPrefs.railCrossingShowInNav.value, app.vela.ui.MapPoiPrefs.railCrossingShowInMap.value, app.vela.ui.MapPoiPrefs.railCrossingScale.floatValue))
+    )
+    style.getLayer(CONTROLS_HUMP_LAYER)?.setProperties(
+        PropertyFactory.visibility(resolveCtrlVis(app.vela.ui.MapPoiPrefs.speedHumpShowInNav.value, app.vela.ui.MapPoiPrefs.speedHumpShowInMap.value, app.vela.ui.MapPoiPrefs.speedHumpScale.floatValue))
+    )
+
+    fun resolveCtrlMinZ(prefVal: Float): Float = when {
+        prefVal in 0.001f..0.05f -> 0f
+        prefVal > 0.05f -> prefVal
+        navMode -> 15.4f
+        else -> CONTROLS_BROWSE_SHOW_ZOOM
+    }
+    style.getLayer(CONTROLS_SIGNAL_LAYER)?.minZoom = resolveCtrlMinZ(app.vela.ui.MapPoiPrefs.signalMinZoom.floatValue)
+    style.getLayer(CONTROLS_STOP_LAYER)?.minZoom = resolveCtrlMinZ(app.vela.ui.MapPoiPrefs.stopSignMinZoom.floatValue)
+    style.getLayer(CONTROLS_RAILX_LAYER)?.minZoom = resolveCtrlMinZ(app.vela.ui.MapPoiPrefs.railCrossingMinZoom.floatValue)
+    style.getLayer(CONTROLS_HUMP_LAYER)?.minZoom = resolveCtrlMinZ(app.vela.ui.MapPoiPrefs.speedHumpMinZoom.floatValue)
+
+    val controlsVis = if (searchHide) Property.NONE else Property.VISIBLE
     if (controlsVis != lastControlsVis) {
         listOf(CONTROLS_LAYER, CONTROLS_CLAIM_LAYER).forEach { id ->
             style.getLayer(id)?.setProperties(PropertyFactory.visibility(controlsVis))
@@ -11790,6 +11872,16 @@ internal fun stopSignBitmap(): Bitmap {
     }
     c.drawText("STOP", cx, cy + 4f, label)
     return bmp
+}
+
+private fun singleControlSizeExpression(baseScale: Float, iconScale: Float): Expression {
+    val scale = baseScale * iconScale
+    return Expression.interpolate(
+        Expression.linear(), Expression.zoom(),
+        Expression.stop(15.5f, Expression.literal(0.98f * scale)),
+        Expression.stop(17f, Expression.literal(1.37f * scale)),
+        Expression.stop(19f, Expression.literal(1.95f * scale)),
+    )
 }
 
 private fun controlsSizeExpression(

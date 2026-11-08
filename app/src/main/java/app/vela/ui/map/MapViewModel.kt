@@ -6946,6 +6946,23 @@ class MapViewModel @Inject constructor(
                     val budget = intArrayOf(reqBudget)
                     val tried = ArrayList<LatLng>()
                     val results = ArrayList<Pair<Route, Int>>()
+
+                    // First try natural highway-free route if highways weren't already avoided
+                    if (isTotalAvoidance && !avoidHighways && mode == TravelMode.DRIVE) {
+                        val noHwy = runCatching {
+                            dataSource.directions(origin, dest, mode, stops, avoidTolls, true, avoidFerries)
+                        }.getOrDefault(emptyList()).firstOrNull()
+                        if (noHwy != null) {
+                            val nNoHwy = withContext(Dispatchers.Default) {
+                                camerasMatchingAvoidOnPoly(noHwy.polyline, mode, targets, liveAlprPool, liveSpeedPool).size
+                            }
+                            if (nNoHwy == 0) {
+                                android.util.Log.i("VelaFlockRoute", "total avoidance: avoidHighways alternative has 0 cameras!")
+                                results += noHwy to 0
+                            }
+                        }
+                    }
+
                     for (i in routesNow.indices) {
                         if (budget[0] <= 0) break
                         if (countsNow[i] <= 0 || routesNow[i].detourPlan.isNotEmpty()) continue
@@ -6957,9 +6974,9 @@ class MapViewModel @Inject constructor(
                         val options = listOf(app.vela.core.nav.CameraDetour.Option(countsNow[0], eta(routesNow[0]))) +
                             results.map { (r, n) -> app.vela.core.nav.CameraDetour.Option(n, eta(r)) }
                         val pick = if (isTotalAvoidance) {
-                            val minCams = options.minOf { it.cameras }
-                            if (minCams < countsNow[0]) {
-                                options.indices.filter { options[it].cameras == minCams }.minByOrNull { options[it].etaS }
+                            val zeroCamOptions = options.indices.filter { options[it].cameras == 0 }
+                            if (zeroCamOptions.isNotEmpty()) {
+                                zeroCamOptions.minByOrNull { options[it].etaS }
                             } else {
                                 null
                             }
@@ -7059,13 +7076,8 @@ class MapViewModel @Inject constructor(
                     }
                     val extra = eta(r) - eta0
                     if (isTotalAvoidance) {
-                        if (n < currentCount) {
-                            currentVias = trial
-                            currentRoute = r.copy(detourPlan = plan)
-                            currentCount = n
-                            iterationImproved = true
-                            if (n == 0) return currentRoute to 0
-                            break@candLoop
+                        if (n == 0) {
+                            return r.copy(detourPlan = plan) to 0
                         }
                     } else {
                         if (n < currentCount && extra <= cap) {
@@ -7081,7 +7093,11 @@ class MapViewModel @Inject constructor(
             if (!iterationImproved) break
         }
         android.util.Log.i("VelaFlockRoute", "detour finished: requests=$requests (${budget[0]} left) cameras $routeCount -> $currentCount")
-        return if (currentCount < routeCount) currentRoute to currentCount else null
+        return if (isTotalAvoidance) {
+            if (currentCount == 0) currentRoute to 0 else null
+        } else {
+            if (currentCount < routeCount) currentRoute to currentCount else null
+        }
     }
 
     private var wazeJob: kotlinx.coroutines.Job? = null
@@ -8799,6 +8815,7 @@ class MapViewModel @Inject constructor(
             app.vela.ui.MapPoiPrefs.poiPlaceMinZoom.floatValue,
         )
         val hasZ0Poi = allPoiMinZooms.any { it in 0.001f..0.05f }
+        val hasWidePoi = allPoiMinZooms.any { it in 0.001f..13.5f }
         val effectiveAmbientMin = when {
             hasZ0Poi -> 0.0
             allPoiMinZooms.any { it > 0.05f } -> minOf(14.0, allPoiMinZooms.filter { it > 0.05f }.minOrNull()!!.toDouble())
@@ -8833,7 +8850,8 @@ class MapViewModel @Inject constructor(
         prefetchJob?.cancel() // the old neighborhood's warm-up is moot once the view moved
         // Span ≈ viewport height: ~9 km at z14 down to ~3.5 km zoomed in (kept ≥3.5 km — tighter
         // than that returns FEWER local hits, per the live calibration).
-        val span = (9000.0 / 2.0.pow(zoom - 14.0)).coerceIn(3500.0, 9000.0)
+        val maxSpan = if (hasWidePoi) 60000.0 else 9000.0
+        val span = (9000.0 / 2.0.pow(zoom - 14.0)).coerceIn(3500.0, maxSpan)
         // Any recent nearby fetch cached (e.g. an area you already visited this session)? Repaint it
         // INSTANTLY so there's no empty→OSM-POI flash→ambient "small then pop bigger" while the network
         // fetch below runs; the fetch then refines it. UNCONDITIONAL on purpose (2026-07-11): the old
@@ -8984,23 +9002,42 @@ class MapViewModel @Inject constructor(
      *  paint anyway. Preserves `res`'s prominence order (the ambient layer's collision key = index),
      *  so the anchor store still beats its in-store tenant. */
     private fun keepAmbientForView(res: List<app.vela.core.model.Place>, viewRadiusMeters: Double, zoom: Double): List<app.vela.core.model.Place> {
-        val filtered = res.asSequence()
+        val hasZ0Poi = listOf(
+            app.vela.ui.MapPoiPrefs.fuelStationMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.parkingMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.foodMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.shopMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.sportMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.eduMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.healthMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.lodgingMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.cultureMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.civicMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.parkMinZoom.floatValue,
+            app.vela.ui.MapPoiPrefs.transitStopMinZoom.floatValue,
+        ).any { it in 0.001f..13.5f }
+        val allFiltered = res.asSequence()
             .filterNot { p -> p.permanentlyClosed }
             .filter { p ->
                 if (viewRadiusMeters <= 0.0) return@filter true
                 val reach = viewRadiusMeters * (1.25 + 0.35 * (app.vela.ui.map.AmbientStability.prominenceOf(p) / 8.0).coerceIn(0.0, 1.0))
                 (p.distanceMeters ?: 0.0) <= reach
             }
-            // Re-rank with the prominence each place was PAINTED with (AmbientStability): the pool
-            // arrives ranked on whatever review counts this request carried, and a settled view is
-            // painted several times, so the cap and the collision order used to shuffle under a
-            // user who had not moved. New places still sort into place on their own value.
             .sortedWith(
                 compareByDescending<app.vela.core.model.Place> { app.vela.ui.map.AmbientStability.prominenceOf(it) }
                     .thenBy { it.distanceMeters ?: Double.MAX_VALUE },
             )
-            .take(ambientCap(zoom))
             .toList()
+
+        val cap = if (hasZ0Poi && zoom < 14.0) 300 else ambientCap(zoom)
+        val filtered = if (allFiltered.size <= cap) {
+            allFiltered
+        } else if (hasZ0Poi && zoom < 14.0) {
+            val step = allFiltered.size.toDouble() / cap
+            (0 until cap).map { i -> allFiltered[(i * step).toInt().coerceAtMost(allFiltered.lastIndex)] }
+        } else {
+            allFiltered.take(cap)
+        }
 
         // Deduplicate fuel stations within 180m to avoid duplicate station icons
         val seenFuel = ArrayList<LatLng>()
@@ -9873,18 +9910,21 @@ class MapViewModel @Inject constructor(
             // else: unfiltered, every sign and light in view drew, blocks from the line, and the
             // set was re-uploaded on every pan (user drive, Pixel 9, 2026-10-05).
             val navPoly = _state.value.takeIf { it.navigating }?.activeRoute?.polyline
+            val clusterM = if (zoom >= 15.0) CONTROLS_CLUSTER_M else (CONTROLS_CLUSTER_M * (1 shl (15 - zoom.toInt()).coerceIn(0, 6))).toDouble()
             val merged = withContext(Dispatchers.Default) {
                 (if (navPoly != null) controlsOnRoute(navPoly, res) else res).groupBy { it.kind }.flatMap { (kind, group) ->
-                    app.vela.core.data.MapDeclutter.cluster(group, CONTROLS_CLUSTER_M) { it.loc }
+                    app.vela.core.data.MapDeclutter.cluster(group, clusterM) { it.loc }
                         .map { c -> app.vela.core.data.TrafficControl(c.centroid, kind) }
                 }
             }
-            val cLat0 = (s + n) / 2; val cLng0 = (w + e) / 2
-            val lngScale = kotlin.math.cos(Math.toRadians(cLat0))
-            val kept = if (merged.size <= CONTROLS_ONSCREEN_CAP) merged else merged.sortedBy {
-                val dLat = it.loc.lat - cLat0; val dLng = (it.loc.lng - cLng0) * lngScale
-                dLat * dLat + dLng * dLng
-            }.take(CONTROLS_ONSCREEN_CAP)
+            val cap = if (hasZ0Controls && zoom < 14.0) 2500 else CONTROLS_ONSCREEN_CAP
+            val kept = if (merged.size <= cap) {
+                merged
+            } else {
+                // Stride sample across the full merged set so controls cover the whole view, not just the center
+                val step = merged.size.toDouble() / cap
+                (0 until cap).map { i -> merged[(i * step).toInt().coerceAtMost(merged.lastIndex)] }
+            }
             // Fetch/merge visibility: like flock's diag line, "controls don't show" reports are
             // only diagnosable when the pipeline says what it actually produced.
             android.util.Log.i("VelaControls", "fetched=${res.size} merged=${merged.size} kept=${kept.size}")

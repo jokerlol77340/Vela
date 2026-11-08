@@ -1638,8 +1638,9 @@
     <string name="settings_flock_detour_moderate_hint">Attempts light detours via parallel streets within a reasonable time limit</string>
     <string name="settings_flock_detour_total">Total avoidance</string>
     <string name="settings_flock_detour_total_hint">Finds a route passing through zero cameras or radars, even if the trip is long and winding</string>
-    <string name="pictogram_min_zoom">Min zoom:</string>
+    <string name="pictogram_min_zoom">Display from:</string>
     <string name="pictogram_zoom_default">Default</string>
+    <string name="pictogram_zoom_all">All distances</string>
     <string name="pictogram_display_mode">Display:</string>
     <string name="pictogram_mode_all">Map &amp; Nav</string>
     <string name="pictogram_mode_map_only">Map only</string>
