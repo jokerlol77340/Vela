@@ -51,169 +51,46 @@ data class TripMeta(
 class TripStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    private val dir: File get() = File(context.filesDir, "trips").apply { mkdirs() }
+    private val dir: File get() = File(context.filesDir, "trips")
 
-    @Volatile private var active: File? = null
-    private val lock = Any()
-
-    /** Begin a trip; returns its id (or null if one's already recording). */
-    fun startTrip(label: String, dest: LatLng?, startedAt: Long): String? = synchronized(lock) {
-        if (active != null) return null
-        val id = "trip_$startedAt"
-        val f = File(dir, "$id.csv")
-        val safe = label.replace(',', ' ').replace('\n', ' ').take(80).ifBlank { "Trip" }
-        runCatching {
-            // versionCode LAST: TripLog.parse reads META by index, so appending keeps old files
-            // and old parsers compatible - and an audit can now say which build recorded a trip.
-            f.writeText("META,$safe,$startedAt,${dest?.lat ?: ""},${dest?.lng ?: ""},${app.vela.BuildConfig.VERSION_CODE}\n")
-            active = f
-        }
-        return id
+    init {
+        // Privacy policy: never store GPS trip traces on disk; purge any legacy folder on startup.
+        runCatching { dir.deleteRecursively() }
     }
 
-    /** Append a fix to the active trip (no-op if none is recording). */
-    fun record(loc: Location, offRoute: Boolean = false, offRouteHits: Int = 0) = synchronized(lock) {
-        val f = active ?: return
-        runCatching {
-            // offRoute + accuracy LAST (appended columns, 2026-07-16): the parser reads fixes by
-            // index, so old files and old parsers stay compatible. offRoute = which fixes the
-            // engine considered off-route; accuracy = what the accuracy-scaled corridor actually
-            // saw (an off-route audit is unreconstructable without it).
-            // provider + offRouteHits LAST (appended columns, 2026-09-13): which provider the fix
-            // came from (a network fix that slipped in explains a teleport) and how far the
-            // engine's off-route debounce had counted (a reroute about to fire shows as 1, 2, 3).
-            f.appendText(
-                "${loc.latitude},${loc.longitude},${loc.time},${loc.bearing},${loc.speed}," +
-                    "${if (offRoute) 1 else 0},${loc.accuracy},${loc.provider ?: ""},$offRouteHits\n",
-            )
-        }
-        Unit
-    }
+    /** Trip recording is permanently disabled for privacy; never creates files on disk. */
+    fun startTrip(label: String, dest: LatLng?, startedAt: Long): String? = null
 
-    /** Append a flight-recorder EVENT line: [tag] is one of "S" (spoken), "J" (jank sample),
-     *  "B" (battery). No-op unless a trip is recording. Commas inside [payload] are fine for S
-     *  (the parser splits with a limit); J/B payloads are numeric. */
-    fun note(tag: String, payload: String) = synchronized(lock) {
-        val f = active ?: return
-        runCatching { f.appendText("$tag,${System.currentTimeMillis()},${payload.replace('\n', ' ')}\n") }
-        Unit
-    }
+    /** No-op: GPS fixes are never persisted to disk. */
+    fun record(loc: Location, offRoute: Boolean = false, offRouteHits: Int = 0) = Unit
 
-    /**
-     * Persist the navigated [route] (blue line + maneuvers) into the active trip. Written once,
-     * right after [startTrip], so a later replay drives the exact same route and an analysis can
-     * diff the spoken/printed directions against where the turns really are. No-op if no trip is
-     * recording or the route is too short to be meaningful.
-     */
-    fun saveRoute(route: Route, reason: String = "") = synchronized(lock) {
-        val f = active ?: return
-        if (route.polyline.size < 2) return
-        runCatching { f.appendText(TripLog.encodeRoute(route, reason)) }
-        Unit
-    }
+    /** No-op: flight-recorder events are never persisted to disk. */
+    fun note(tag: String, payload: String) = Unit
 
-    /** Close the active trip. Deletes it if it captured too few fixes to be useful. */
-    /**
-     * Close the active trip.
-     *
-     * Returns the saved trip when one was KEPT, so a caller can offer to name it; null when
-     * nothing was recording or the trip was too short to be worth keeping (under 5 fixes -
-     * starting nav and immediately ending it should not leave litter in the list).
-     */
-    fun finishTrip(): TripMeta? = synchronized(lock) {
-        val f = active ?: return null
-        active = null
-        return runCatching {
-            if (countFixes(f) < 5) { f.delete(); null } else readMeta(f)
-        }.getOrNull()
-    }
+    /** No-op: navigated routes are never persisted to trip logs. */
+    fun saveRoute(route: Route, reason: String = "") = Unit
 
-    val isRecording: Boolean get() = active != null
+    /** No-op: no trip is ever recorded. */
+    fun finishTrip(): TripMeta? = null
 
-    fun list(): List<TripMeta> = runCatching {
-        dir.listFiles { f -> f.extension == "csv" }.orEmpty()
-            .mapNotNull { readMeta(it) }
-            .sortedByDescending { it.startedAt }
-    }.getOrDefault(emptyList())
+    val isRecording: Boolean get() = false
 
-    fun load(id: String): List<TripFix> = runCatching {
-        File(dir, "$id.csv").readLines().drop(1).mapNotNull { line ->
-            val p = line.split(',')
-            if (p.size < 5) return@mapNotNull null
-            TripFix(
-                p[0].toDoubleOrNull() ?: return@mapNotNull null,
-                p[1].toDoubleOrNull() ?: return@mapNotNull null,
-                p[2].toLongOrNull() ?: 0L,
-                p[3].toFloatOrNull() ?: 0f,
-                p[4].toFloatOrNull() ?: 0f,
-            )
-        }
-    }.getOrDefault(emptyList())
+    fun list(): List<TripMeta> = emptyList()
 
-    /**
-     * Re-read the route saved alongside a trip (the same blue line the user drove), or null if it
-     * wasn't recorded — e.g. an older trip from before route-saving, in which case the caller
-     * re-routes. Reconstructs a [Route] with a single leg holding all the maneuvers; enough for
-     * [app.vela.core.nav.NavEngine] to replay turn-by-turn identically.
-     */
-    fun loadRoute(id: String): Route? =
-        runCatching { TripLog.parseRoute(File(dir, "$id.csv").readLines()) }.getOrNull()
+    fun load(id: String): List<TripFix> = emptyList()
 
-    /** The raw CSV for a saved trip, for export/share (or null if missing). */
-    fun rawCsv(id: String): String? = runCatching { File(dir, "$id.csv").readText() }.getOrNull()
+    fun loadRoute(id: String): Route? = null
 
-    /**
-     * Rename a saved trip.
-     *
-     * The header surgery itself is `TripLog.renameHeader` in :core (beside the format, and unit
-     * tested); this does the file IO. Written to a temp file and renamed over the original,
-     * because a half-written header makes the whole recording unparseable and a drive cannot be
-     * recorded again.
-     *
-     * Returns false when the file is missing or is not a trip - nothing is written then.
-     */
-    fun rename(id: String, label: String): Boolean = synchronized(lock) {
-        val f = File(dir, "$id.csv")
-        return runCatching {
-            if (!f.exists()) return false
-            val out = TripLog.renameHeader(f.readLines(), label) ?: return false
-            val tmp = File(dir, "$id.csv.tmp")
-            tmp.writeText(out.joinToString("\n") + "\n")
-            val ok = tmp.renameTo(f)
-            if (!ok) tmp.delete()
-            ok
-        }.getOrDefault(false)
-    }
+    fun rawCsv(id: String): String? = null
+
+    fun rename(id: String, label: String): Boolean = false
 
     fun delete(id: String) {
-        runCatching { File(dir, "$id.csv").delete() }
-        if (active?.name == "$id.csv") active = null
+        runCatching { dir.deleteRecursively() }
     }
 
-    /** Deletes the drives past [app.vela.core.replay.TripRetention.KEEP_DAYS], never the one being
-     *  recorded; returns how many went. */
-    fun pruneExpired(nowMs: Long = System.currentTimeMillis()): Int = synchronized(lock) {
-        val old = dir.listFiles { f -> f.extension == "csv" }.orEmpty()
-            .filter { it != active && app.vela.core.replay.TripRetention.expired(it.lastModified(), nowMs) }
-        old.count { runCatching { it.delete() }.getOrDefault(false) }
+    fun pruneExpired(nowMs: Long = System.currentTimeMillis()): Int {
+        runCatching { dir.deleteRecursively() }
+        return 0
     }
-
-    private fun readMeta(f: File): TripMeta? = runCatching {
-        val first = f.bufferedReader().use { it.readLine() } ?: return null
-        if (!first.startsWith("META,")) return null
-        val p = first.removePrefix("META,").split(',')
-        val label = p.getOrNull(0)?.ifBlank { "Trip" } ?: "Trip"
-        val startedAt = p.getOrNull(1)?.toLongOrNull() ?: 0L
-        val dest = p.getOrNull(2)?.toDoubleOrNull()?.let { la -> p.getOrNull(3)?.toDoubleOrNull()?.let { lo -> LatLng(la, lo) } }
-        // One pass for the list row's figures (fix count, distance, duration).
-        val stats = f.useLines { TripLog.stats(it) }
-        TripMeta(f.nameWithoutExtension, label, startedAt, stats.fixes, dest, stats.distanceM, stats.durationMs)
-    }.getOrNull()
-
-    // Count only the `lat,...` fix lines. A trip with a saved route also holds RP/RD/M
-    // lines; lines-minus-header counted those as fixes, inflating the count and letting
-    // a no-fix trip slip past the too-short-to-keep delete check.
-    private fun countFixes(f: File): Int = runCatching {
-        f.useLines { lines -> lines.count { it.substringBefore(',').toDoubleOrNull() != null } }
-    }.getOrDefault(0)
 }

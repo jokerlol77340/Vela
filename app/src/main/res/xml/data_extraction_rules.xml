@@ -1,19 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The same list as backup_rules.xml (Android 12 and later read this file; keep the two in step). -->
+<!-- Cloud backup is completely disabled for privacy; device transfer excludes any GPS trip traces. -->
 <data-extraction-rules>
     <cloud-backup>
-        <include domain="sharedpref" path="vela_settings.xml" />
-        <include domain="sharedpref" path="vela_onboarding.xml" />
-        <include domain="sharedpref" path="vela_notices.xml" />
-        <include domain="sharedpref" path="vela_units.xml" />
-        <include domain="sharedpref" path="vela_shortcuts.xml" />
-        <include domain="sharedpref" path="vela_saved.xml" />
-        <include domain="sharedpref" path="vela_saved_routes.xml" />
-        <include domain="sharedpref" path="vela_lists.xml" />
-        <include domain="sharedpref" path="vela_recents.xml" />
-        <include domain="sharedpref" path="vela_recent_places.xml" />
-        <include domain="file" path="trips/" />
-        <include domain="file" path="fonts/ui.ttf" />
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="vela_settings.xml" />
@@ -26,7 +19,6 @@
         <include domain="sharedpref" path="vela_lists.xml" />
         <include domain="sharedpref" path="vela_recents.xml" />
         <include domain="sharedpref" path="vela_recent_places.xml" />
-        <include domain="file" path="trips/" />
         <include domain="file" path="fonts/ui.ttf" />
     </device-transfer>
 </data-extraction-rules>

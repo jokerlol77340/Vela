@@ -178,6 +178,7 @@ internal fun DiagnosticsSettingsScreen(vm: MapViewModel, onBack: () -> Unit, onC
         // Re-read on entry so a trip recorded since the app launched shows up without
         // a restart (the list was otherwise only refreshed after a delete).
         LaunchedEffect(Unit) { reloadTrips() }
+        if (false) {
         Spacer(Modifier.height(4.dp))
         SettingsGroup {
         ToggleRow(
@@ -341,6 +342,7 @@ internal fun DiagnosticsSettingsScreen(vm: MapViewModel, onBack: () -> Unit, onC
             }
         } else if (state.tripRecordingEnabled && tripsLoaded) {
             Hint(stringResource(R.string.settings_no_trips_hint))
+        }
         }
         }
         renaming?.let { target ->

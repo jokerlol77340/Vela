@@ -73,9 +73,9 @@ fun WelcomeScreen(vm: app.vela.ui.map.MapViewModel, onGetStarted: () -> Unit) {
     // "Choose what Google is used for" does not lose them.
     var avoidCameras by rememberSaveable { mutableStateOf(FlockRouteAlert.on.value) }
     var warnCameras by rememberSaveable { mutableStateOf(FlockNavAlert.any) }
-    // Saved drives, on for a new install, with the old ones clearing themselves.
-    var saveTrips by rememberSaveable { mutableStateOf(true) }
-    var clearTrips by rememberSaveable { mutableStateOf(true) }
+    // Trip recording is permanently disabled for privacy.
+    var saveTrips by rememberSaveable { mutableStateOf(false) }
+    var clearTrips by rememberSaveable { mutableStateOf(false) }
     fun finish(useGoogle: Boolean) {
         GoogleFree.set(context, !useGoogle)
         FlockRouteAlert.set(context, avoidCameras)
@@ -250,8 +250,6 @@ private fun GoogleChoice(
             )
             Spacer(Modifier.height(20.dp)) // wider than between the two answers above: this is another question
             CameraChoices(avoidCameras, warnCameras, onAvoidCameras, onWarnCameras)
-            Spacer(Modifier.height(12.dp))
-            TripChoices(saveTrips, clearTrips, onSaveTrips, onClearTrips)
             Spacer(Modifier.height(24.dp))
             WelcomeButton(stringResource(R.string.welcome_continue)) { onContinue(useGoogle) }
             // Only with Google on: with it off there is nothing left to choose.

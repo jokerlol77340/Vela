@@ -7551,20 +7551,22 @@ class MapViewModel @Inject constructor(
     fun refreshRouteBar() =
         _state.update { it.copy(routeBarEnabled = settingsPrefs.getBoolean("route_bar", false)) }
 
-    fun refreshTripRecording() =
+    fun refreshTripRecording() {
+        settingsPrefs.edit().putBoolean("trip_recording_on", false).apply()
         _state.update {
             it.copy(
-                tripRecordingEnabled = settingsPrefs.getBoolean("trip_recording_on", false),
-                tripAutoClear = settingsPrefs.getBoolean(TRIP_AUTO_CLEAR, false),
-                nameTripsOnSave = settingsPrefs.getBoolean("trip_name_on_save", false),
+                tripRecordingEnabled = false,
+                tripAutoClear = false,
+                nameTripsOnSave = false,
             )
         }
+    }
 
-    /** Opt in/out of recording nav trips (GPS traces) for replay — strictly local,
-     *  more invasive than diagnostics, so it's its own toggle. */
+    /** Trip recording is permanently disabled for privacy; always forces false. */
     fun setTripRecording(on: Boolean) {
-        settingsPrefs.edit().putBoolean("trip_recording_on", on).apply()
-        _state.update { it.copy(tripRecordingEnabled = on) }
+        settingsPrefs.edit().putBoolean("trip_recording_on", false).apply()
+        _state.update { it.copy(tripRecordingEnabled = false) }
+        viewModelScope.launch(Dispatchers.IO) { tripStore.pruneExpired() }
     }
 
     /** "Delete drives after 30 days" (the first-run card, Settings > Diagnostics). Turning it on
