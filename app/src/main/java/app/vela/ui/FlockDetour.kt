@@ -47,6 +47,29 @@ object FlockDetour {
     fun setMode(context: Context, newMode: CameraAvoidDetourMode) {
         mode.value = newMode
         on.value = (newMode != CameraAvoidDetourMode.DISABLED)
+        if (newMode == CameraAvoidDetourMode.TOTAL_AVOIDANCE) {
+            if (FlockRouteAlert.driveTargets.value.isEmpty()) {
+                FlockRouteAlert.setTargetsFor(
+                    context,
+                    TravelMode.DRIVE,
+                    setOf(CameraAvoidTarget.ALPR, CameraAvoidTarget.SURVEILLANCE, CameraAvoidTarget.RADAR)
+                )
+            }
+            if (FlockRouteAlert.walkTargets.value.isEmpty()) {
+                FlockRouteAlert.setTargetsFor(
+                    context,
+                    TravelMode.WALK,
+                    setOf(CameraAvoidTarget.ALPR, CameraAvoidTarget.SURVEILLANCE)
+                )
+            }
+            if (FlockRouteAlert.bikeTargets.value.isEmpty()) {
+                FlockRouteAlert.setTargetsFor(
+                    context,
+                    TravelMode.BICYCLE,
+                    setOf(CameraAvoidTarget.ALPR, CameraAvoidTarget.SURVEILLANCE)
+                )
+            }
+        }
         prefs(context).edit()
             .putString(KEY_MODE, newMode.prefKey)
             .putBoolean(KEY_LEGACY, on.value)

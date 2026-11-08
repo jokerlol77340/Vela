@@ -35,6 +35,9 @@ object CameraDetour {
      *  points to try. */
     data class Candidate(val atM: Double, val count: Int, val left: LatLng, val right: LatLng, val at: LatLng)
 
+    /** A camera cluster with multiple lateral offsets (progressive radii) for Total Avoidance. */
+    data class CandidateMulti(val atM: Double, val count: Int, val vias: List<LatLng>, val at: LatLng)
+
     /** A route as the camera choice sees it: how many cameras it passes and its shown time. */
     data class Option(val cameras: Int, val etaS: Double)
 
@@ -58,6 +61,9 @@ object CameraDetour {
     fun untried(cands: List<Candidate>, tried: List<LatLng>, withinM: Double = SAME_CLUSTER_M): List<Candidate> =
         cands.filter { c -> tried.none { t -> distM(c.at, t) <= withinM } }
 
+    fun untriedMulti(cands: List<CandidateMulti>, tried: List<LatLng>, withinM: Double = SAME_CLUSTER_M): List<CandidateMulti> =
+        cands.filter { c -> tried.none { t -> distM(c.at, t) <= withinM } }
+
     private fun distM(a: LatLng, b: LatLng): Double {
         val k = 111_320.0 * Math.cos(Math.toRadians(a.lat))
         return Math.hypot((a.lng - b.lng) * k, (a.lat - b.lat) * 111_320.0)
@@ -77,6 +83,41 @@ object CameraDetour {
             val p = RouteProjection.pointAt(poly, cum, g.atM)
             val brg = RouteProjection.bearingAt(poly, cum, g.atM)
             Candidate(g.atM, g.count, offset(p, brg - 90.0, offsetM), offset(p, brg + 90.0, offsetM), p)
+        }
+    }
+
+    /**
+     * Candidates with multiple progressive offset distances (250m, 500m, 1000m, 1800m)
+     * and pre-camera exit anticipation for Total Avoidance.
+     */
+    fun candidatesMulti(
+        poly: List<LatLng>,
+        cameraAlongM: List<Double>,
+        isTotalAvoidance: Boolean,
+        maxClusters: Int = if (isTotalAvoidance) 8 else MAX_CLUSTERS,
+    ): List<CandidateMulti> {
+        if (poly.size < 2 || cameraAlongM.isEmpty()) return emptyList()
+        val cum = RouteProjection.cumulative(poly)
+        val offsets = if (isTotalAvoidance) {
+            listOf(250.0, 500.0, 1000.0, 1800.0)
+        } else {
+            listOf(OFFSET_M, 300.0)
+        }
+        return CameraAlerts.group(cameraAlongM.sorted()).take(maxClusters).map { g ->
+            val p = RouteProjection.pointAt(poly, cum, g.atM)
+            val brg = RouteProjection.bearingAt(poly, cum, g.atM)
+            val vias = ArrayList<LatLng>()
+            for (off in offsets) {
+                vias.add(offset(p, brg - 90.0, off))
+                vias.add(offset(p, brg + 90.0, off))
+                if (isTotalAvoidance && off >= 500.0 && g.atM >= 150.0) {
+                    val pBefore = RouteProjection.pointAt(poly, cum, (g.atM - 150.0).coerceAtLeast(0.0))
+                    val brgBefore = RouteProjection.bearingAt(poly, cum, (g.atM - 150.0).coerceAtLeast(0.0))
+                    vias.add(offset(pBefore, brgBefore - 90.0, off))
+                    vias.add(offset(pBefore, brgBefore + 90.0, off))
+                }
+            }
+            CandidateMulti(g.atM, g.count, vias, p)
         }
     }
 

@@ -6942,7 +6942,7 @@ class MapViewModel @Inject constructor(
                 val routesNow = _state.value.routes
                 val countsNow = _state.value.flockOnRoute
                 if (routesNow.size == countsNow.size && countsNow.any { it > 0 }) {
-                    val reqBudget = if (isTotalAvoidance) 12 else app.vela.core.nav.CameraDetour.MAX_REQUESTS
+                    val reqBudget = if (isTotalAvoidance) 24 else app.vela.core.nav.CameraDetour.MAX_REQUESTS
                     val budget = intArrayOf(reqBudget)
                     val tried = ArrayList<LatLng>()
                     val results = ArrayList<Pair<Route, Int>>()
@@ -6957,14 +6957,17 @@ class MapViewModel @Inject constructor(
                         val options = listOf(app.vela.core.nav.CameraDetour.Option(countsNow[0], eta(routesNow[0]))) +
                             results.map { (r, n) -> app.vela.core.nav.CameraDetour.Option(n, eta(r)) }
                         val pick = if (isTotalAvoidance) {
-                            val zeroIdx = options.indices.filter { options[it].cameras == 0 }.minByOrNull { options[it].etaS }
-                            if (zeroIdx != null && zeroIdx != 0) zeroIdx
-                            else app.vela.core.nav.CameraDetour.choose(options, eta0, cap)
+                            val minCams = options.minOf { it.cameras }
+                            if (minCams < countsNow[0]) {
+                                options.indices.filter { options[it].cameras == minCams }.minByOrNull { options[it].etaS }
+                            } else {
+                                null
+                            }
                         } else {
                             app.vela.core.nav.CameraDetour.choose(options, eta0, cap)
                         }
                         android.util.Log.i("VelaFlockRoute", "detour pick: ${results.size} result(s), cameras ${results.map { it.second }}, leader ${countsNow[0]} -> ${pick?.let { options[it].cameras } ?: countsNow[0]}")
-                        if (pick != null && routesEpoch == epoch) {
+                        if (pick != null && pick > 0 && routesEpoch == epoch) {
                             val (kept, n) = results[pick - 1]
                             _state.update { it.copy(routes = listOf(kept) + it.routes, flockOnRoute = listOf(n) + it.flockOnRoute) }
                             selectRoute(0)
@@ -7016,56 +7019,69 @@ class MapViewModel @Inject constructor(
         isTotalAvoidance: Boolean = false,
     ): Pair<Route, Int>? {
         val eta = { r: Route -> r.durationInTrafficSeconds ?: r.durationSeconds }
-        val poly = route.polyline
-        val cum = app.vela.core.nav.RouteProjection.cumulative(poly)
-        val maxClusters = if (isTotalAvoidance) 8 else app.vela.core.nav.CameraDetour.MAX_CLUSTERS
-        val cands = withContext(Dispatchers.Default) {
-            val hits = camerasMatchingAvoidOnPoly(poly, mode, targets, liveAlprPool, liveSpeedPool)
-            val along = hits.mapNotNull { loc -> app.vela.core.nav.RouteProjection.alongMeters(poly, cum, loc, 60.0) }
-            app.vela.core.nav.CameraDetour.untried(app.vela.core.nav.CameraDetour.candidates(poly, along, maxClusters = maxClusters), tried)
-        }
-        if (cands.isEmpty()) return null
-        val stopAt = stops.map { app.vela.core.nav.RouteProjection.alongMeters(poly, cum, it, 250.0) to it }
-        var vias = emptyList<Pair<Double, LatLng>>()
-        var best: Route? = null
-        var bestCount = routeCount
+        var currentRoute = route
+        var currentCount = routeCount
+        var currentVias = emptyList<Pair<Double, LatLng>>()
         var requests = 0
-        val maxReqPerRoute = if (isTotalAvoidance) 8 else app.vela.core.nav.CameraDetour.MAX_REQUESTS_PER_ROUTE
-        outer@ for (c in cands) {
-            tried += c.at
-            for (via in listOf(c.left, c.right)) {
-                if (requests >= maxReqPerRoute || budget[0] <= 0) break@outer
-                val trial = vias + (c.atM to via)
-                val plan = app.vela.core.nav.CameraDetour.mergePlan(stopAt, trial)
-                requests++
-                budget[0]--
-                val r = runCatching { dataSource.directions(origin, dest, mode, plan, avoidTolls, avoidHighways, avoidFerries) }
-                    .getOrDefault(emptyList()).firstOrNull() ?: continue
-                if (routesEpoch != epoch) return null
-                val n = withContext(Dispatchers.Default) {
-                    camerasMatchingAvoidOnPoly(r.polyline, mode, targets, liveAlprPool, liveSpeedPool).size
-                }
-                val extra = eta(r) - eta0
-                if (isTotalAvoidance) {
-                    if (n < bestCount) {
-                        vias = trial
-                        best = r.copy(detourPlan = plan)
-                        bestCount = n
-                        if (n == 0) break@outer
-                        break
+        val maxReqPerRoute = if (isTotalAvoidance) 16 else app.vela.core.nav.CameraDetour.MAX_REQUESTS_PER_ROUTE
+        val maxIters = if (isTotalAvoidance) 4 else 1
+
+        for (iter in 0 until maxIters) {
+            if (currentCount <= 0 || requests >= maxReqPerRoute || budget[0] <= 0) break
+            val poly = currentRoute.polyline
+            val cum = app.vela.core.nav.RouteProjection.cumulative(poly)
+            val cands = withContext(Dispatchers.Default) {
+                val hits = camerasMatchingAvoidOnPoly(poly, mode, targets, liveAlprPool, liveSpeedPool)
+                if (hits.isEmpty()) return@withContext emptyList()
+                val along = hits.mapNotNull { loc -> app.vela.core.nav.RouteProjection.alongMeters(poly, cum, loc, 60.0) }
+                app.vela.core.nav.CameraDetour.untriedMulti(
+                    app.vela.core.nav.CameraDetour.candidatesMulti(poly, along, isTotalAvoidance),
+                    tried
+                )
+            }
+            if (cands.isEmpty()) break
+            val stopAt = stops.map { app.vela.core.nav.RouteProjection.alongMeters(poly, cum, it, 250.0) to it }
+
+            var iterationImproved = false
+            candLoop@ for (c in cands) {
+                tried += c.at
+                for (via in c.vias) {
+                    if (requests >= maxReqPerRoute || budget[0] <= 0) break@candLoop
+                    val trial = currentVias + (c.atM to via)
+                    val plan = app.vela.core.nav.CameraDetour.mergePlan(stopAt, trial)
+                    requests++
+                    budget[0]--
+                    val r = runCatching { dataSource.directions(origin, dest, mode, plan, avoidTolls, avoidHighways, avoidFerries) }
+                        .getOrDefault(emptyList()).firstOrNull() ?: continue
+                    if (routesEpoch != epoch) return null
+                    val n = withContext(Dispatchers.Default) {
+                        camerasMatchingAvoidOnPoly(r.polyline, mode, targets, liveAlprPool, liveSpeedPool).size
                     }
-                } else {
-                    if (n < bestCount && extra <= cap) {
-                        vias = trial
-                        best = r.copy(detourPlan = plan)
-                        bestCount = n
-                        break
+                    val extra = eta(r) - eta0
+                    if (isTotalAvoidance) {
+                        if (n < currentCount) {
+                            currentVias = trial
+                            currentRoute = r.copy(detourPlan = plan)
+                            currentCount = n
+                            iterationImproved = true
+                            if (n == 0) return currentRoute to 0
+                            break@candLoop
+                        }
+                    } else {
+                        if (n < currentCount && extra <= cap) {
+                            currentVias = trial
+                            currentRoute = r.copy(detourPlan = plan)
+                            currentCount = n
+                            iterationImproved = true
+                            break@candLoop
+                        }
                     }
                 }
             }
+            if (!iterationImproved) break
         }
-        android.util.Log.i("VelaFlockRoute", "detour: clusters=${cands.size} requests=$requests (${budget[0]} left) kept=${best != null} cameras $routeCount -> $bestCount")
-        return best?.let { it to bestCount }
+        android.util.Log.i("VelaFlockRoute", "detour finished: requests=$requests (${budget[0]} left) cameras $routeCount -> $currentCount")
+        return if (currentCount < routeCount) currentRoute to currentCount else null
     }
 
     private var wazeJob: kotlinx.coroutines.Job? = null

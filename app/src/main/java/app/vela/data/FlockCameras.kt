@@ -416,8 +416,14 @@ object FlockCameras {
                         val p = LatLng(lat[i], lng[i])
                         val d = dir.getOrElse(i) { Float.NaN }
                         val facing = if (d.isNaN()) null else d.toDouble()
-                        if (app.vela.core.nav.CameraFacing.onRoute(polyline, p, facing, meters)) {
-                            out.add(AlprCamera(p, op[i], dirStr(i), isAlpr = isAlprArr.getOrElse(i) { true }))
+                        val isAlpr = isAlprArr.getOrElse(i) { true }
+                        val onRoute = if (isAlpr) {
+                            app.vela.core.nav.CameraFacing.onRoute(polyline, p, facing, meters)
+                        } else {
+                            app.vela.core.data.OverpassAlprCameras.nearPolyline(p, polyline, meters.coerceAtLeast(50.0))
+                        }
+                        if (onRoute) {
+                            out.add(AlprCamera(p, op[i], dirStr(i), isAlpr = isAlpr))
                         }
                     }
                 }
