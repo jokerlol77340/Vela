@@ -33,6 +33,8 @@ object WazeAlertsPref {
     val cardWarn = mutableStateOf(true)
     val any: Boolean get() = enabled.value && (cardWarn.value || voiceWarn.value)
     val wazeIconScale = mutableFloatStateOf(1.0f)
+    val wazeMinZoom = mutableFloatStateOf(0f)
+    val wazeShowInNav = mutableStateOf(true)
 
     /** Raw Waze alerts fetched once for the active route (already deduplicated against fixed radars/cameras). */
     val currentRouteAlerts = mutableStateOf<List<WazeAlert>>(emptyList())
@@ -62,6 +64,18 @@ object WazeAlertsPref {
         voiceWarn.value = p.getBoolean(KEY_VOICE, true)
         cardWarn.value = p.getBoolean(KEY_CARD, true)
         wazeIconScale.floatValue = p.getFloat(KEY_SCALE, 1.0f)
+        wazeMinZoom.floatValue = p.getFloat(KEY_MIN_ZOOM, 0f)
+        wazeShowInNav.value = p.getBoolean(KEY_SHOW_IN_NAV, true)
+    }
+
+    fun setWazeMinZoom(context: Context, value: Float) {
+        wazeMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_MIN_ZOOM, value).apply()
+    }
+
+    fun setWazeShowInNav(context: Context, value: Boolean) {
+        wazeShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_SHOW_IN_NAV, value).apply()
     }
 
     fun setEnabled(context: Context, value: Boolean) {
@@ -108,4 +122,6 @@ object WazeAlertsPref {
     private const val KEY_VOICE = "waze_live_voice"
     private const val KEY_CARD = "waze_live_card"
     private const val KEY_SCALE = "map_nav_waze_scale"
+    private const val KEY_MIN_ZOOM = "map_nav_waze_min_zoom"
+    private const val KEY_SHOW_IN_NAV = "map_nav_waze_show_in_nav"
 }

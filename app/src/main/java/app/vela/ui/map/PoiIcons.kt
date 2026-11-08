@@ -447,7 +447,7 @@ object PoiIcons {
         val c = category?.lowercase() ?: return "default"
         fun any(vararg k: String) = k.any { it in c }
         return when {
-            any("gas station", "gas ", "fuel", "petrol", "charging station", "ev charg") -> "fuel"
+            any("gas station", "gas ", "fuel", "petrol", "charging station", "ev charg", "gas_station", "essence", "station service", "station-service", "carburant") -> "fuel"
             any("coffee", "cafe", "café", "espresso", "tea ", "teahouse") -> "food"
             any("restaurant", "pizza", "burger", "steak", "sushi", "diner", "bakery", "deli", "bistro",
                 "eatery", "barbecue", "bbq", "taco", "sandwich", "ice cream", "donut", "brewery", "brewpub",
@@ -503,6 +503,7 @@ object PoiIcons {
         val n = name?.lowercase() ?: return "default"
         fun any(vararg k: String) = k.any { it in n }
         return when {
+            any("totalenergies", "total energies", "station-service", "station service", "rel.bercheres", "rel.", "relais ") -> "fuel"
             any("ymca", "ywca", "crossfit", " gym", "fitness", "athletic club", "health club", "rec center", "recreation center") -> "sport"
             any("church", "chapel", "cathedral", "parish", " mosque", "synagogue", "temple", "gurdwara",
                 "kingdom hall", "ministries", "worship center") -> "civic"

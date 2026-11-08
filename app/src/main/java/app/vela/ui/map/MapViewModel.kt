@@ -9882,7 +9882,11 @@ class MapViewModel @Inject constructor(
             speedCamRoutesKey = routesKey
             speedCamBox = null
         }
-        if (!app.vela.ui.SpeedCams.on.value || (zoom < FLOCK_MIN_ZOOM && shown.isEmpty())) {
+        val effectiveSpeedMin = minOf(
+            FLOCK_MIN_ZOOM,
+            if (app.vela.ui.MapPoiPrefs.speedcamMinZoom.floatValue > 0f) app.vela.ui.MapPoiPrefs.speedcamMinZoom.floatValue.toDouble() else FLOCK_MIN_ZOOM,
+        )
+        if (!app.vela.ui.SpeedCams.on.value || (zoom < effectiveSpeedMin && shown.isEmpty())) {
             speedCamBox = null
             speedCamJob?.cancel()
             if (_state.value.speedCameras.isNotEmpty()) _state.update { it.copy(speedCameras = emptyList()) }
@@ -9905,7 +9909,7 @@ class MapViewModel @Inject constructor(
                     )
                 }
             } else emptyList()
-            val instantBox = if (zoom >= FLOCK_MIN_ZOOM) {
+            val instantBox = if (zoom >= effectiveSpeedMin) {
                 withContext(Dispatchers.Default) { app.vela.data.BundledSpeedCameras.inBox(s, w, n, e) }
             } else emptyList()
             val initial = withContext(Dispatchers.Default) {
@@ -9924,16 +9928,16 @@ class MapViewModel @Inject constructor(
                     }
                 }
             } else emptyList()
-            val coverBox = if (zoom >= FLOCK_MIN_ZOOM) roadFeaturesCover(s, w, n, e) else RoadCover.FAILED
+            val coverBox = if (zoom >= effectiveSpeedMin) roadFeaturesCover(s, w, n, e) else RoadCover.FAILED
             val bakedBox = if (coverBox == RoadCover.LOADED) {
                 withContext(Dispatchers.Default) { app.vela.data.RoadFeatures.camerasInBox(s, w, n, e) }
             } else emptyList()
-            val liveBox = if (zoom >= FLOCK_MIN_ZOOM && (east - west) <= 1.5 && (north - south) <= 1.5) {
+            val liveBox = if (zoom >= effectiveSpeedMin && (east - west) <= 1.5 && (north - south) <= 1.5) {
                 withContext(Dispatchers.IO) {
                     runCatching { app.vela.core.data.OverpassSpeedCameras.fetchInBox(http, s, w, n, e) }.getOrNull().orEmpty()
                 }
             } else emptyList()
-            val liveRoute = if (shown.isNotEmpty() && zoom < FLOCK_MIN_ZOOM) {
+            val liveRoute = if (shown.isNotEmpty() && zoom < effectiveSpeedMin) {
                 withContext(Dispatchers.IO) {
                     shown.take(2).flatMap { r ->
                         runCatching { app.vela.core.data.OverpassSpeedCameras.fetchAlongCorridor(http, r.polyline) }.getOrNull().orEmpty()
@@ -10260,7 +10264,12 @@ class MapViewModel @Inject constructor(
         val shown = if (st.navigating) listOfNotNull(st.activeRoute) else st.routes
         val routesKey = if (shown.isEmpty()) 0 else shown.fold(17) { h, r -> 31 * h + System.identityHashCode(r) }
         if (routesKey != flockRoutesKey) { flockRoutesKey = routesKey; flockBox = null; flockOnRoute = null; flockOnRouteJobKey = 0 }
-        if (!app.vela.ui.Flock.on.value || (zoom < FLOCK_MIN_ZOOM && shown.isEmpty())) {
+        val effectiveFlockMin = minOf(
+            FLOCK_MIN_ZOOM,
+            if (app.vela.ui.MapPoiPrefs.flockMinZoom.floatValue > 0f) app.vela.ui.MapPoiPrefs.flockMinZoom.floatValue.toDouble() else FLOCK_MIN_ZOOM,
+            if (app.vela.ui.MapPoiPrefs.surveillanceCamMinZoom.floatValue > 0f) app.vela.ui.MapPoiPrefs.surveillanceCamMinZoom.floatValue.toDouble() else FLOCK_MIN_ZOOM,
+        )
+        if (!app.vela.ui.Flock.on.value || (zoom < effectiveFlockMin && shown.isEmpty())) {
             flockBox = null
             flockJob?.cancel()
             if (flockOnRoute == null) flockOnRouteJobKey = 0
@@ -10268,50 +10277,6 @@ class MapViewModel @Inject constructor(
             return
         }
         val cLat = (south + north) / 2; val cLng = (west + east) / 2
-        if (shown.isNotEmpty()) {
-            val all = flockOnRoute
-            if (all == null) {
-                if (flockOnRouteJobKey == routesKey) return
-                flockOnRouteJobKey = routesKey
-                flockJob?.cancel()
-                flockJob = viewModelScope.launch {
-                    app.vela.data.FlockCameras.ensureLoaded(appContext)
-                    val bundled = withContext(Dispatchers.Default) {
-                        app.vela.data.FlockCameras.mergeAndDedupe(*shown.map { app.vela.data.FlockCameras.along(it.polyline) }.toTypedArray())
-                    }
-                    if (bundled.isNotEmpty() && flockRoutesKey == routesKey) {
-                        _state.update { it.copy(flockCameras = bundled.take(CONTROLS_ONSCREEN_CAP)) }
-                    }
-                    val live = withContext(Dispatchers.IO) {
-                        shown.take(2).flatMap { r ->
-                            runCatching { app.vela.core.data.OverpassAlprCameras.fetchAlong(http, r.polyline, nearMeters = 55.0) }.getOrDefault(emptyList())
-                        }
-                    }
-                    val res = withContext(Dispatchers.Default) {
-                        app.vela.data.FlockCameras.mergeAndDedupe(bundled, live)
-                    }
-                    if (flockRoutesKey != routesKey) return@launch
-                    flockOnRoute = res
-                    diag.record("flock", "route set: ${res.size} camera(s) on ${shown.size} route(s)", "multi-source")
-                    lastFlockViewport?.let { refreshFlock(it[0], it[1], it[2], it[3], it[4]) }
-                }
-                return
-            }
-            if (all.size <= CONTROLS_ONSCREEN_CAP) {
-                if (_state.value.flockCameras !== all) _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(all)) }
-                return
-            }
-            flockBox?.let { b ->
-                val insLat = (b[2] - b[0]) * 0.25; val insLng = (b[3] - b[1]) * 0.25
-                if (cLat in (b[0] + insLat)..(b[2] - insLat) && cLng in (b[1] + insLng)..(b[3] - insLng)) return
-            }
-            val padLat = (north - south) * 0.5; val padLng = (east - west) * 0.5
-            val s = south - padLat; val n = north + padLat; val w = west - padLng; val e = east + padLng
-            flockBox = doubleArrayOf(s, w, n, e)
-            val kept = capFlock(all.filter { it.loc.lat in s..n && it.loc.lng in w..e }, s, n, w, e)
-            _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(kept)) }
-            return
-        }
         flockBox?.let { b ->
             val insLat = (b[2] - b[0]) * 0.25; val insLng = (b[3] - b[1]) * 0.25
             if (cLat in (b[0] + insLat)..(b[2] - insLat) && cLng in (b[1] + insLng)..(b[3] - insLng)) return
@@ -10321,27 +10286,48 @@ class MapViewModel @Inject constructor(
         flockJob?.cancel()
         flockJob = viewModelScope.launch {
             app.vela.data.FlockCameras.ensureLoaded(appContext)
-            val bundled = withContext(Dispatchers.Default) { app.vela.data.FlockCameras.inBox(s, w, n, e) }
-            if (bundled.isNotEmpty()) {
-                _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(capFlock(bundled, s, n, w, e))) }
+            val bundledBox = if (zoom >= effectiveFlockMin) {
+                withContext(Dispatchers.Default) { app.vela.data.FlockCameras.inBox(s, w, n, e) }
+            } else emptyList()
+            val bundledRoute = if (shown.isNotEmpty()) {
+                withContext(Dispatchers.Default) {
+                    app.vela.data.FlockCameras.mergeAndDedupe(*shown.map { app.vela.data.FlockCameras.along(it.polyline) }.toTypedArray())
+                }
+            } else emptyList()
+            val initial = withContext(Dispatchers.Default) {
+                app.vela.data.FlockCameras.mergeAndDedupe(bundledRoute, bundledBox, flockOnRoute.orEmpty())
             }
-            delay(300)
-            val live = if ((east - west) <= 2.2 && (north - south) <= 2.2) {
+            if (initial.isNotEmpty()) {
+                _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(capFlock(initial, s, n, w, e))) }
+            }
+            delay(250)
+            val liveBox = if (zoom >= effectiveFlockMin && (east - west) <= 2.2 && (north - south) <= 2.2) {
                 withContext(Dispatchers.IO) {
                     runCatching { app.vela.core.data.OverpassAlprCameras.fetchInBox(http, s, w, n, e) }.getOrNull()
                 }
             } else emptyList()
-            if (live == null && bundled.isEmpty()) {
-                diag.record("flock", "camera fetch failed at z${"%.1f".format(zoom)}", "Overpass box [$s,$w,$n,$e]")
-                return@launch
-            }
             val merged = withContext(Dispatchers.Default) {
-                app.vela.data.FlockCameras.mergeAndDedupe(bundled, live.orEmpty())
+                app.vela.data.FlockCameras.mergeAndDedupe(initial, liveBox.orEmpty())
             }
             flockBox = doubleArrayOf(s, w, n, e)
             val kept = capFlock(merged, s, n, w, e)
             diag.record("flock", "showing ${kept.size} camera(s) at z${"%.1f".format(zoom)}", "multi-source")
             _state.update { it.copy(flockCameras = app.vela.ui.Flock.filterEnabled(kept)) }
+
+            if (shown.isNotEmpty() && flockOnRoute == null && flockOnRouteJobKey != routesKey) {
+                flockOnRouteJobKey = routesKey
+                val liveRoute = withContext(Dispatchers.IO) {
+                    shown.take(2).flatMap { r ->
+                        runCatching { app.vela.core.data.OverpassAlprCameras.fetchAlong(http, r.polyline, nearMeters = 80.0) }.getOrDefault(emptyList())
+                    }
+                }
+                val routeSet = withContext(Dispatchers.Default) {
+                    app.vela.data.FlockCameras.mergeAndDedupe(bundledRoute, liveRoute)
+                }
+                if (flockRoutesKey == routesKey) {
+                    flockOnRoute = routeSet
+                }
+            }
         }
     }
 

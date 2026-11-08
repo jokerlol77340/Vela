@@ -1638,4 +1638,13 @@
     <string name="settings_flock_detour_moderate_hint">Tente de légers détours par les rues parallèles dans une limite de temps raisonnable</string>
     <string name="settings_flock_detour_total">Évitement total</string>
     <string name="settings_flock_detour_total_hint">Recherche un itinéraire ne passant par aucune caméra ou radar sélectionné, même si le trajet est long et tortueux</string>
+    <string name="pictogram_min_zoom">Zoom min :</string>
+    <string name="pictogram_zoom_default">Défaut</string>
+    <string name="pictogram_display_mode">Affichage :</string>
+    <string name="pictogram_mode_all">Carte &amp; Nav</string>
+    <string name="pictogram_mode_map_only">Carte seule</string>
+    <string name="camera_detour_chip_total">Évitement total</string>
+    <string name="camera_detour_chip_moderate">Rues voisines</string>
+    <string name="camera_detour_chip_disabled">Sans détour</string>
+    <string name="camera_detour_mode_title">Contournement :</string>
 </resources>

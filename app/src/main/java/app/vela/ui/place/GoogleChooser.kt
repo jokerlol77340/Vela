@@ -493,6 +493,7 @@ fun GoogleStyleDirectionsPanel(
                                         )
                                     }
                                     AvoidCamerasChip(mode = currentMode)
+                                    AvoidDetourChip(mode = currentMode)
                                 }
                                 if (currentMode == TravelMode.DRIVE && (avoidTolls || avoidHighways || avoidFerries) && routes.isNotEmpty() && routes.all { it.avoidNotHonored }) {
                                     Row(Modifier.padding(start = 20.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.Top) {
@@ -757,6 +758,47 @@ internal fun AvoidCamerasChip(mode: TravelMode = TravelMode.DRIVE) {
             }
             if (currentTargets.isNotEmpty()) {
                 androidx.compose.material3.HorizontalDivider()
+                androidx.compose.foundation.layout.Row(
+                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.camera_detour_mode_title),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                val detourOptions = listOf(
+                    app.vela.ui.CameraAvoidDetourMode.DISABLED to R.string.settings_flock_detour_disabled,
+                    app.vela.ui.CameraAvoidDetourMode.MODERATE to R.string.camera_detour_chip_moderate,
+                    app.vela.ui.CameraAvoidDetourMode.TOTAL_AVOIDANCE to R.string.settings_flock_detour_total,
+                )
+                val curDetour = app.vela.ui.FlockDetour.mode.value
+                detourOptions.forEach { (dMode, textRes) ->
+                    val isDetourSelected = curDetour == dMode
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = {
+                            androidx.compose.foundation.layout.Row(
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                androidx.compose.material3.RadioButton(
+                                    selected = isDetourSelected,
+                                    onClick = null,
+                                )
+                                Text(
+                                    stringResource(textRes),
+                                    fontWeight = if (isDetourSelected) FontWeight.Bold else FontWeight.Normal,
+                                )
+                            }
+                        },
+                        onClick = {
+                            app.vela.ui.FlockDetour.setMode(context, dMode)
+                            app.vela.ui.RouteActions.camerasChanged?.invoke()
+                        },
+                    )
+                }
+                androidx.compose.material3.HorizontalDivider()
                 androidx.compose.material3.DropdownMenuItem(
                     text = {
                         Text(
@@ -767,6 +809,65 @@ internal fun AvoidCamerasChip(mode: TravelMode = TravelMode.DRIVE) {
                     onClick = {
                         menuOpen = false
                         app.vela.ui.FlockRouteAlert.setTargetsFor(context, mode, emptySet())
+                        app.vela.ui.RouteActions.camerasChanged?.invoke()
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun AvoidDetourChip(mode: TravelMode = TravelMode.DRIVE) {
+    if (!app.vela.ui.FlockRouteAlert.isEnabledFor(mode)) return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val detourMode = app.vela.ui.FlockDetour.mode.value
+    var menuOpen by remember { mutableStateOf(false) }
+
+    val label = when (detourMode) {
+        app.vela.ui.CameraAvoidDetourMode.TOTAL_AVOIDANCE -> stringResource(R.string.camera_detour_chip_total)
+        app.vela.ui.CameraAvoidDetourMode.MODERATE -> stringResource(R.string.camera_detour_chip_moderate)
+        app.vela.ui.CameraAvoidDetourMode.DISABLED -> stringResource(R.string.camera_detour_chip_disabled)
+    }
+
+    Box {
+        FilterChip(
+            selected = detourMode != app.vela.ui.CameraAvoidDetourMode.DISABLED,
+            onClick = { menuOpen = true },
+            label = { Text(label) },
+            shape = CircleShape,
+            modifier = Modifier.dpadHighlight(CircleShape),
+        )
+        androidx.compose.material3.DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+        ) {
+            val options = listOf(
+                app.vela.ui.CameraAvoidDetourMode.DISABLED to R.string.settings_flock_detour_disabled,
+                app.vela.ui.CameraAvoidDetourMode.MODERATE to R.string.camera_detour_chip_moderate,
+                app.vela.ui.CameraAvoidDetourMode.TOTAL_AVOIDANCE to R.string.settings_flock_detour_total,
+            )
+            options.forEach { (optMode, labelRes) ->
+                val isSelected = detourMode == optMode
+                androidx.compose.material3.DropdownMenuItem(
+                    text = {
+                        androidx.compose.foundation.layout.Row(
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            androidx.compose.material3.RadioButton(
+                                selected = isSelected,
+                                onClick = null,
+                            )
+                            Text(
+                                stringResource(labelRes),
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        }
+                    },
+                    onClick = {
+                        menuOpen = false
+                        app.vela.ui.FlockDetour.setMode(context, optMode)
                         app.vela.ui.RouteActions.camerasChanged?.invoke()
                     },
                 )

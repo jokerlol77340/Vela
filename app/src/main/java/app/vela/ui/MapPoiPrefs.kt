@@ -41,6 +41,38 @@ object MapPoiPrefs {
     val poiPlaceScale = mutableFloatStateOf(1.0f)
     val parkingScale = mutableFloatStateOf(1.0f)
     val savedPinScale = mutableFloatStateOf(1.0f)
+
+    /** Min zoom levels per pictogram (0f = default system zoom floor). */
+    val speedcamMinZoom = mutableFloatStateOf(0f)
+    val flockMinZoom = mutableFloatStateOf(0f)
+    val surveillanceCamMinZoom = mutableFloatStateOf(0f)
+    val signalMinZoom = mutableFloatStateOf(0f)
+    val stopSignMinZoom = mutableFloatStateOf(0f)
+    val railCrossingMinZoom = mutableFloatStateOf(0f)
+    val speedHumpMinZoom = mutableFloatStateOf(0f)
+    val roadShieldMinZoom = mutableFloatStateOf(0f)
+    val exitNumberMinZoom = mutableFloatStateOf(0f)
+    val fuelStationMinZoom = mutableFloatStateOf(0f)
+    val transitStopMinZoom = mutableFloatStateOf(0f)
+    val poiPlaceMinZoom = mutableFloatStateOf(0f)
+    val parkingMinZoom = mutableFloatStateOf(0f)
+    val savedPinMinZoom = mutableFloatStateOf(0f)
+
+    /** Display mode per pictogram: true = Carte & Navigation, false = Carte uniquement. */
+    val speedcamShowInNav = mutableStateOf(true)
+    val flockShowInNav = mutableStateOf(true)
+    val surveillanceCamShowInNav = mutableStateOf(true)
+    val signalShowInNav = mutableStateOf(true)
+    val stopSignShowInNav = mutableStateOf(true)
+    val railCrossingShowInNav = mutableStateOf(true)
+    val speedHumpShowInNav = mutableStateOf(true)
+    val roadShieldShowInNav = mutableStateOf(false)
+    val exitNumberShowInNav = mutableStateOf(false)
+    val fuelStationShowInNav = mutableStateOf(true)
+    val transitStopShowInNav = mutableStateOf(false)
+    val poiPlaceShowInNav = mutableStateOf(false)
+    val parkingShowInNav = mutableStateOf(true)
+    val savedPinShowInNav = mutableStateOf(true)
     /** Where the businesses on the browse map come from, one of [SOURCE_OPEN] (the Overture places
      *  layer where a region file covers the view, Google only on tap, works offline), [SOURCE_GOOGLE]
      *  (the ambient fan-out on every pan, nothing offline) or [SOURCE_BOTH] (the open layer draws the
@@ -98,6 +130,35 @@ object MapPoiPrefs {
         poiPlaceScale.floatValue = p.getFloat(KEY_POI_PLACE_SCALE, 1.0f)
         parkingScale.floatValue = p.getFloat(KEY_PARKING_SCALE, 1.0f)
         savedPinScale.floatValue = p.getFloat(KEY_SAVED_PIN_SCALE, 1.0f)
+        speedcamMinZoom.floatValue = p.getFloat(KEY_SPEEDCAM_MIN_ZOOM, 0f)
+        flockMinZoom.floatValue = p.getFloat(KEY_FLOCK_MIN_ZOOM, 0f)
+        surveillanceCamMinZoom.floatValue = p.getFloat(KEY_SURV_CAM_MIN_ZOOM, 0f)
+        signalMinZoom.floatValue = p.getFloat(KEY_SIGNAL_MIN_ZOOM, 0f)
+        stopSignMinZoom.floatValue = p.getFloat(KEY_STOP_MIN_ZOOM, 0f)
+        railCrossingMinZoom.floatValue = p.getFloat(KEY_RAILX_MIN_ZOOM, 0f)
+        speedHumpMinZoom.floatValue = p.getFloat(KEY_HUMP_MIN_ZOOM, 0f)
+        roadShieldMinZoom.floatValue = p.getFloat(KEY_ROAD_SHIELD_MIN_ZOOM, 0f)
+        exitNumberMinZoom.floatValue = p.getFloat(KEY_EXIT_NUMBER_MIN_ZOOM, 0f)
+        fuelStationMinZoom.floatValue = p.getFloat(KEY_FUEL_STATION_MIN_ZOOM, 0f)
+        transitStopMinZoom.floatValue = p.getFloat(KEY_TRANSIT_STOP_MIN_ZOOM, 0f)
+        poiPlaceMinZoom.floatValue = p.getFloat(KEY_POI_PLACE_MIN_ZOOM, 0f)
+        parkingMinZoom.floatValue = p.getFloat(KEY_PARKING_MIN_ZOOM, 0f)
+        savedPinMinZoom.floatValue = p.getFloat(KEY_SAVED_PIN_MIN_ZOOM, 0f)
+
+        speedcamShowInNav.value = p.getBoolean(KEY_SPEEDCAM_NAV, true)
+        flockShowInNav.value = p.getBoolean(KEY_FLOCK_NAV, true)
+        surveillanceCamShowInNav.value = p.getBoolean(KEY_SURV_CAM_NAV, true)
+        signalShowInNav.value = p.getBoolean(KEY_SIGNAL_NAV, true)
+        stopSignShowInNav.value = p.getBoolean(KEY_STOP_NAV, true)
+        railCrossingShowInNav.value = p.getBoolean(KEY_RAILX_NAV, true)
+        speedHumpShowInNav.value = p.getBoolean(KEY_HUMP_NAV, true)
+        roadShieldShowInNav.value = p.getBoolean(KEY_ROAD_SHIELD_NAV, false)
+        exitNumberShowInNav.value = p.getBoolean(KEY_EXIT_NUMBER_NAV, false)
+        fuelStationShowInNav.value = p.getBoolean(KEY_FUEL_STATION_NAV, true)
+        transitStopShowInNav.value = p.getBoolean(KEY_TRANSIT_STOP_NAV, false)
+        poiPlaceShowInNav.value = p.getBoolean(KEY_POI_PLACE_NAV, false)
+        parkingShowInNav.value = p.getBoolean(KEY_PARKING_NAV, true)
+        savedPinShowInNav.value = p.getBoolean(KEY_SAVED_PIN_NAV, true)
         explicitSource = p.getString(KEY_PLACES_SOURCE, null)
         placesSource.value = explicitSource ?: remoteDefault
         placesWithDownloads.value = p.getBoolean(KEY_PLACES_WITH_DOWNLOADS, true)
@@ -274,6 +335,146 @@ object MapPoiPrefs {
         prefs(context).edit().putFloat(KEY_SAVED_PIN_SCALE, value).apply()
     }
 
+    fun setSpeedcamMinZoom(context: Context, value: Float) {
+        speedcamMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_SPEEDCAM_MIN_ZOOM, value).apply()
+    }
+
+    fun setFlockMinZoom(context: Context, value: Float) {
+        flockMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_FLOCK_MIN_ZOOM, value).apply()
+    }
+
+    fun setSurveillanceCamMinZoom(context: Context, value: Float) {
+        surveillanceCamMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_SURV_CAM_MIN_ZOOM, value).apply()
+    }
+
+    fun setSignalMinZoom(context: Context, value: Float) {
+        signalMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_SIGNAL_MIN_ZOOM, value).apply()
+    }
+
+    fun setStopSignMinZoom(context: Context, value: Float) {
+        stopSignMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_STOP_MIN_ZOOM, value).apply()
+    }
+
+    fun setRailCrossingMinZoom(context: Context, value: Float) {
+        railCrossingMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_RAILX_MIN_ZOOM, value).apply()
+    }
+
+    fun setSpeedHumpMinZoom(context: Context, value: Float) {
+        speedHumpMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_HUMP_MIN_ZOOM, value).apply()
+    }
+
+    fun setRoadShieldMinZoom(context: Context, value: Float) {
+        roadShieldMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_ROAD_SHIELD_MIN_ZOOM, value).apply()
+    }
+
+    fun setExitNumberMinZoom(context: Context, value: Float) {
+        exitNumberMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_EXIT_NUMBER_MIN_ZOOM, value).apply()
+    }
+
+    fun setFuelStationMinZoom(context: Context, value: Float) {
+        fuelStationMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_FUEL_STATION_MIN_ZOOM, value).apply()
+    }
+
+    fun setTransitStopMinZoom(context: Context, value: Float) {
+        transitStopMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_TRANSIT_STOP_MIN_ZOOM, value).apply()
+    }
+
+    fun setPoiPlaceMinZoom(context: Context, value: Float) {
+        poiPlaceMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_POI_PLACE_MIN_ZOOM, value).apply()
+    }
+
+    fun setParkingMinZoom(context: Context, value: Float) {
+        parkingMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_PARKING_MIN_ZOOM, value).apply()
+    }
+
+    fun setSavedPinMinZoom(context: Context, value: Float) {
+        savedPinMinZoom.floatValue = value
+        prefs(context).edit().putFloat(KEY_SAVED_PIN_MIN_ZOOM, value).apply()
+    }
+
+    fun setSpeedcamShowInNav(context: Context, value: Boolean) {
+        speedcamShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_SPEEDCAM_NAV, value).apply()
+    }
+
+    fun setFlockShowInNav(context: Context, value: Boolean) {
+        flockShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_FLOCK_NAV, value).apply()
+    }
+
+    fun setSurveillanceCamShowInNav(context: Context, value: Boolean) {
+        surveillanceCamShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_SURV_CAM_NAV, value).apply()
+    }
+
+    fun setSignalShowInNav(context: Context, value: Boolean) {
+        signalShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_SIGNAL_NAV, value).apply()
+    }
+
+    fun setStopSignShowInNav(context: Context, value: Boolean) {
+        stopSignShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_STOP_NAV, value).apply()
+    }
+
+    fun setRailCrossingShowInNav(context: Context, value: Boolean) {
+        railCrossingShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_RAILX_NAV, value).apply()
+    }
+
+    fun setSpeedHumpShowInNav(context: Context, value: Boolean) {
+        speedHumpShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_HUMP_NAV, value).apply()
+    }
+
+    fun setRoadShieldShowInNav(context: Context, value: Boolean) {
+        roadShieldShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_ROAD_SHIELD_NAV, value).apply()
+    }
+
+    fun setExitNumberShowInNav(context: Context, value: Boolean) {
+        exitNumberShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_EXIT_NUMBER_NAV, value).apply()
+    }
+
+    fun setFuelStationShowInNav(context: Context, value: Boolean) {
+        fuelStationShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_FUEL_STATION_NAV, value).apply()
+    }
+
+    fun setTransitStopShowInNav(context: Context, value: Boolean) {
+        transitStopShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_TRANSIT_STOP_NAV, value).apply()
+    }
+
+    fun setPoiPlaceShowInNav(context: Context, value: Boolean) {
+        poiPlaceShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_POI_PLACE_NAV, value).apply()
+    }
+
+    fun setParkingShowInNav(context: Context, value: Boolean) {
+        parkingShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_PARKING_NAV, value).apply()
+    }
+
+    fun setSavedPinShowInNav(context: Context, value: Boolean) {
+        savedPinShowInNav.value = value
+        prefs(context).edit().putBoolean(KEY_SAVED_PIN_NAV, value).apply()
+    }
+
     private fun prefs(c: Context) = c.getSharedPreferences("vela_settings", Context.MODE_PRIVATE)
     private const val KEY_POIS = "map_show_pois"
     private const val KEY_TRANSIT = "map_show_transit_stops"
@@ -293,6 +494,36 @@ object MapPoiPrefs {
     private const val KEY_POI_PLACE_SCALE = "map_icon_poi_place_scale"
     private const val KEY_PARKING_SCALE = "map_icon_parking_scale"
     private const val KEY_SAVED_PIN_SCALE = "map_icon_saved_pin_scale"
+
+    private const val KEY_SPEEDCAM_MIN_ZOOM = "map_nav_speedcam_min_zoom"
+    private const val KEY_FLOCK_MIN_ZOOM = "map_nav_flock_min_zoom"
+    private const val KEY_SURV_CAM_MIN_ZOOM = "map_nav_surv_cam_min_zoom"
+    private const val KEY_SIGNAL_MIN_ZOOM = "map_nav_signal_min_zoom"
+    private const val KEY_STOP_MIN_ZOOM = "map_nav_stop_min_zoom"
+    private const val KEY_RAILX_MIN_ZOOM = "map_nav_railx_min_zoom"
+    private const val KEY_HUMP_MIN_ZOOM = "map_nav_hump_min_zoom"
+    private const val KEY_ROAD_SHIELD_MIN_ZOOM = "map_icon_road_shield_min_zoom"
+    private const val KEY_EXIT_NUMBER_MIN_ZOOM = "map_icon_exit_number_min_zoom"
+    private const val KEY_FUEL_STATION_MIN_ZOOM = "map_icon_fuel_station_min_zoom"
+    private const val KEY_TRANSIT_STOP_MIN_ZOOM = "map_icon_transit_stop_min_zoom"
+    private const val KEY_POI_PLACE_MIN_ZOOM = "map_icon_poi_place_min_zoom"
+    private const val KEY_PARKING_MIN_ZOOM = "map_icon_parking_min_zoom"
+    private const val KEY_SAVED_PIN_MIN_ZOOM = "map_icon_saved_pin_min_zoom"
+
+    private const val KEY_SPEEDCAM_NAV = "map_nav_speedcam_show_nav"
+    private const val KEY_FLOCK_NAV = "map_nav_flock_show_nav"
+    private const val KEY_SURV_CAM_NAV = "map_nav_surv_cam_show_nav"
+    private const val KEY_SIGNAL_NAV = "map_nav_signal_show_nav"
+    private const val KEY_STOP_NAV = "map_nav_stop_show_nav"
+    private const val KEY_RAILX_NAV = "map_nav_railx_show_nav"
+    private const val KEY_HUMP_NAV = "map_nav_hump_show_nav"
+    private const val KEY_ROAD_SHIELD_NAV = "map_icon_road_shield_show_nav"
+    private const val KEY_EXIT_NUMBER_NAV = "map_icon_exit_number_show_nav"
+    private const val KEY_FUEL_STATION_NAV = "map_icon_fuel_station_show_nav"
+    private const val KEY_TRANSIT_STOP_NAV = "map_icon_transit_stop_show_nav"
+    private const val KEY_POI_PLACE_NAV = "map_icon_poi_place_show_nav"
+    private const val KEY_PARKING_NAV = "map_icon_parking_show_nav"
+    private const val KEY_SAVED_PIN_NAV = "map_icon_saved_pin_show_nav"
     private const val KEY_PLACES_SOURCE = "map_places_source"
     private const val KEY_PLACES_WITH_DOWNLOADS = "offline_places_with_downloads"
     private const val KEY_LOOKUP_TAPPED = "map_places_google_lookup"
