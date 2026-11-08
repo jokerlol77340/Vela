@@ -33,11 +33,46 @@ object MapDeclutter {
     }
 
     fun <T> cluster(items: List<T>, radiusM: Double, loc: (T) -> LatLng): List<Cluster<T>> {
-        val clusters = mutableListOf<Cluster<T>>()
+        if (items.isEmpty()) return emptyList()
+        if (items.size < 50) {
+            val clusters = mutableListOf<Cluster<T>>()
+            for (item in items) {
+                val p = loc(item)
+                val hit = clusters.firstOrNull { approxDistanceM(it.centroid, p) <= radiusM }
+                if (hit != null) hit.add(item, p) else clusters.add(Cluster(item, p))
+            }
+            return clusters
+        }
+        val cellSizeDeg = maxOf(0.001, (radiusM / 111_320.0) * 1.5)
+        fun cellKey(r: Long, c: Long): Long = (r shl 32) xor (c and 0xffffffffL)
+        val grid = HashMap<Long, MutableList<Cluster<T>>>()
+        val clusters = ArrayList<Cluster<T>>(items.size)
+
         for (item in items) {
             val p = loc(item)
-            val hit = clusters.firstOrNull { approxDistanceM(it.centroid, p) <= radiusM }
-            if (hit != null) hit.add(item, p) else clusters.add(Cluster(item, p))
+            val r = Math.floor(p.lat / cellSizeDeg).toLong()
+            val c = Math.floor(p.lng / cellSizeDeg).toLong()
+            var hit: Cluster<T>? = null
+            for (dr in -1..1) {
+                for (dc in -1..1) {
+                    val bucket = grid[cellKey(r + dr, c + dc)] ?: continue
+                    for (candidate in bucket) {
+                        if (approxDistanceM(candidate.centroid, p) <= radiusM) {
+                            hit = candidate
+                            break
+                        }
+                    }
+                    if (hit != null) break
+                }
+                if (hit != null) break
+            }
+            if (hit != null) {
+                hit.add(item, p)
+            } else {
+                val cl = Cluster(item, p)
+                clusters.add(cl)
+                grid.getOrPut(cellKey(r, c)) { mutableListOf() }.add(cl)
+            }
         }
         return clusters
     }

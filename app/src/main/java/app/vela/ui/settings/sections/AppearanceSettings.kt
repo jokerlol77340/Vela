@@ -671,7 +671,7 @@ private fun PictogramRowsList(
     rows: List<PictogramRow>,
     scales: List<Float>,
 ) {
-    val zoomLevels = listOf(0f, 8f, 10f, 11f, 12f, 13f, 14f, 15f, 16f)
+    val zoomLevels = listOf(0f, 0.01f, 8f, 10f, 11f, 12f, 13f, 14f, 15f, 16f)
     rows.forEachIndexed { rowIdx, row ->
         if (rowIdx > 0) GroupDivider()
         androidx.compose.foundation.layout.Column(
@@ -729,10 +729,23 @@ private fun PictogramRowsList(
                 FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     val zoomFocus = remember { List(zoomLevels.size) { FocusRequester() } }
                     zoomLevels.forEachIndexed { i, z ->
+                        val isSelected = when {
+                            z <= 0f -> row.currentMinZoom <= 0f
+                            z <= 0.05f -> row.currentMinZoom in 0.001f..0.05f
+                            else -> kotlin.math.abs(row.currentMinZoom - z) < 0.1f
+                        }
                         FilterChip(
-                            selected = kotlin.math.abs(row.currentMinZoom - z) < 0.1f,
+                            selected = isSelected,
                             onClick = { row.onMinZoomChange(z) },
-                            label = { Text(if (z <= 0f) stringResource(R.string.pictogram_zoom_default) else "z${z.toInt()}") },
+                            label = {
+                                Text(
+                                    when {
+                                        z <= 0f -> stringResource(R.string.pictogram_zoom_default)
+                                        z <= 0.05f -> "z0"
+                                        else -> "z${z.toInt()}"
+                                    }
+                                )
+                            },
                             shape = androidx.compose.foundation.shape.CircleShape,
                             modifier = Modifier
                                 .dpadHighlight(androidx.compose.foundation.shape.CircleShape)

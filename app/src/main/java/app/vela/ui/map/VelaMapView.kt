@@ -2820,7 +2820,8 @@ fun VelaMapView(
                 PropertyFactory.iconSize(1f * roadShieldScale.coerceAtLeast(0.01f)),
                 PropertyFactory.textSize(11f * roadShieldScale.coerceAtLeast(0.01f)),
             )
-            if (roadShieldMinZoom > 0f) navShield?.minZoom = roadShieldMinZoom
+            if (roadShieldMinZoom in 0.001f..0.05f) navShield?.minZoom = 0f
+            else if (roadShieldMinZoom > 0.05f) navShield?.minZoom = roadShieldMinZoom
 
             val exitVis = if (!effExitShow) Property.NONE else Property.VISIBLE
             val navExit = st.getLayer(NAV_EXIT_LAYER) as? SymbolLayer
@@ -2828,7 +2829,8 @@ fun VelaMapView(
                 PropertyFactory.visibility(exitVis),
                 PropertyFactory.textSize(13.5f * exitNumberScale.coerceAtLeast(0.01f)),
             )
-            if (exitNumberMinZoom > 0f) navExit?.minZoom = exitNumberMinZoom
+            if (exitNumberMinZoom in 0.001f..0.05f) navExit?.minZoom = 0f
+            else if (exitNumberMinZoom > 0.05f) navExit?.minZoom = exitNumberMinZoom
 
             fun poiProminenceExpr(lowBase: Float, highBase: Float, baseMult: Float): Expression {
                 fun interp(m: Float) = Expression.interpolate(
@@ -2854,7 +2856,8 @@ fun VelaMapView(
             }
             fun groupOp(isShown: Boolean, minZ: Float): Expression {
                 if (!isShown) return Expression.literal(0f)
-                return if (minZ > 0f) Expression.step(Expression.zoom(), Expression.literal(0f), Expression.stop(minZ, Expression.literal(1f))) else Expression.literal(1f)
+                if (minZ in 0.001f..0.05f) return Expression.literal(1f)
+                return if (minZ > 0.05f) Expression.step(Expression.zoom(), Expression.literal(0f), Expression.stop(minZ, Expression.literal(1f))) else Expression.literal(1f)
             }
             val poiGroupOpacityExpr = Expression.match(
                 Expression.get("group"),
@@ -2940,7 +2943,12 @@ fun VelaMapView(
             }
             val trSc = sc * (if (effTransitShow) transitStopScale else 0.0001f)
             st.getLayer(TRANSIT_STOPS_LAYER)?.let { l ->
-                if (transitStopMinZoom > 0f) l.minZoom = transitStopMinZoom
+                val trMinZ = when {
+                    transitStopMinZoom in 0.001f..0.05f -> 0f
+                    transitStopMinZoom > 0.05f -> transitStopMinZoom
+                    else -> null
+                }
+                if (trMinZ != null) l.minZoom = trMinZ
                 l.setProperties(
                     PropertyFactory.iconSize(
                         Expression.interpolate(
@@ -2954,7 +2962,12 @@ fun VelaMapView(
                 )
             }
             st.getLayer(PARKING_LAYER)?.let { l ->
-                if (parkingMinZoom > 0f) l.minZoom = parkingMinZoom
+                val prkMinZ = when {
+                    parkingMinZoom in 0.001f..0.05f -> 0f
+                    parkingMinZoom > 0.05f -> parkingMinZoom
+                    else -> null
+                }
+                if (prkMinZ != null) l.minZoom = prkMinZ
                 l.setProperties(
                     PropertyFactory.iconSize(sc * (if (effParkingShow) parkingScale else 0.0001f)),
                     PropertyFactory.iconOpacity(if (effParkingShow) 1f else 0f),
@@ -2975,11 +2988,16 @@ fun VelaMapView(
             )
             listOf(CONTROLS_LAYER, CONTROLS_CLAIM_LAYER).forEach { id ->
                 val l = st.getLayer(id) ?: return@forEach
+                fun ctrlZ(z: Float): Float? = when {
+                    z in 0.001f..0.05f -> 0f
+                    z > 0.05f -> z
+                    else -> null
+                }
                 val minControlsZ = listOfNotNull(
-                    if (effSignalShow && signalMinZoom > 0f) signalMinZoom else null,
-                    if (effStopShow && stopSignMinZoom > 0f) stopSignMinZoom else null,
-                    if (effRailxShow && railCrossingMinZoom > 0f) railCrossingMinZoom else null,
-                    if (effHumpShow && speedHumpMinZoom > 0f) speedHumpMinZoom else null,
+                    if (effSignalShow) ctrlZ(signalMinZoom) else null,
+                    if (effStopShow) ctrlZ(stopSignMinZoom) else null,
+                    if (effRailxShow) ctrlZ(railCrossingMinZoom) else null,
+                    if (effHumpShow) ctrlZ(speedHumpMinZoom) else null,
                 ).minOrNull()
                 if (minControlsZ != null) {
                     l.minZoom = minControlsZ
@@ -2990,8 +3008,13 @@ fun VelaMapView(
                 )
             }
             val pinSc = sc * (if (effSavedShow) savedPinScale else 0.0001f)
+            val pinMinZ = when {
+                savedPinMinZoom in 0.001f..0.05f -> 0f
+                savedPinMinZoom > 0.05f -> savedPinMinZoom
+                else -> null
+            }
             listOf(MARKERS_LAYER, MARKERS_DOTS_LAYER, SAVED_LAYER).forEach { id ->
-                if (savedPinMinZoom > 0f) st.getLayer(id)?.minZoom = savedPinMinZoom
+                if (pinMinZ != null) st.getLayer(id)?.minZoom = pinMinZ
             }
             st.getLayer(MARKERS_LAYER)?.setProperties(
                 PropertyFactory.iconSize(1.15f * pinSc),
@@ -3023,7 +3046,8 @@ fun VelaMapView(
             )
             fun camTypeOpacity(show: Boolean, minZ: Float): Expression {
                 if (!show) return Expression.literal(0f)
-                val z = if (minZ > 0f) minZ else 11f
+                if (minZ in 0.001f..0.05f) return Expression.literal(1f)
+                val z = if (minZ > 0.05f) minZ else 11f
                 return Expression.step(Expression.zoom(), Expression.literal(0f), Expression.stop(z, Expression.literal(1f)))
             }
             val camOpacityExpr = Expression.switchCase(
@@ -3031,9 +3055,15 @@ fun VelaMapView(
                 camTypeOpacity(effFlockShow, flockMinZoom),
                 camTypeOpacity(effSurvShow, survCamMinZoom),
             )
+            fun cMinZ(show: Boolean, z: Float): Float = when {
+                !show -> 11f
+                z in 0.001f..0.05f -> 0f
+                z > 0.05f -> z
+                else -> 11f
+            }
             val camsMinZ = minOf(
-                if (effFlockShow && flockMinZoom > 0f) flockMinZoom else 11f,
-                if (effSurvShow && survCamMinZoom > 0f) survCamMinZoom else 11f,
+                cMinZ(effFlockShow, flockMinZoom),
+                cMinZ(effSurvShow, survCamMinZoom),
             )
             val detailMinZ = if (camsMinZ < 14f) 14f else camsMinZ
             st.getLayer(FLOCK_CLUSTER_LAYER)?.let { l ->
@@ -3066,8 +3096,14 @@ fun VelaMapView(
                 Expression.stop(17f, 1.0f * speedcamSc),
                 Expression.stop(19f, 1.35f * speedcamSc),
             )
-            val scZ = if (speedcamMinZoom > 0f) speedcamMinZoom else 11f
-            val scOp = if (!effSpeedcamShow) Expression.literal(0f) else Expression.step(Expression.zoom(), Expression.literal(0f), Expression.stop(scZ, Expression.literal(1f)))
+            val scZ = when {
+                speedcamMinZoom in 0.001f..0.05f -> 0f
+                speedcamMinZoom > 0.05f -> speedcamMinZoom
+                else -> 11f
+            }
+            val scOp = if (!effSpeedcamShow) Expression.literal(0f)
+                else if (speedcamMinZoom in 0.001f..0.05f) Expression.literal(1f)
+                else Expression.step(Expression.zoom(), Expression.literal(0f), Expression.stop(scZ, Expression.literal(1f)))
             st.getLayer(SPEEDCAM_LAYER)?.let { l ->
                 l.minZoom = scZ
                 l.setProperties(
@@ -3083,8 +3119,14 @@ fun VelaMapView(
                 Expression.stop(17f, 1.0f * wazeFactor),
                 Expression.stop(19f, 1.35f * wazeFactor),
             )
-            val wzZ = if (wazeMinZoom > 0f) wazeMinZoom else 11f
-            val wzOp = if (!effWazeShow) Expression.literal(0f) else Expression.step(Expression.zoom(), Expression.literal(0f), Expression.stop(wzZ, Expression.literal(1f)))
+            val wzZ = when {
+                wazeMinZoom in 0.001f..0.05f -> 0f
+                wazeMinZoom > 0.05f -> wazeMinZoom
+                else -> 11f
+            }
+            val wzOp = if (!effWazeShow) Expression.literal(0f)
+                else if (wazeMinZoom in 0.001f..0.05f) Expression.literal(1f)
+                else Expression.step(Expression.zoom(), Expression.literal(0f), Expression.stop(wzZ, Expression.literal(1f)))
             st.getLayer(WAZE_LAYER)?.let { l ->
                 l.minZoom = wzZ
                 l.setProperties(
@@ -10972,12 +11014,21 @@ private fun applyData(
     // route is active so route-overview zoom (z11-12) still shows its cameras (issue #131 dead-band).
     // The browse/route floor applies to the CLUSTERED flock layer (the low-zoom face of that
     // feature; detail layers stay pinned at FLOCK_DETAIL_ZOOM) and to the speed-camera layer.
-    val scMinZ = if (app.vela.ui.MapPoiPrefs.speedcamMinZoom.floatValue > 0f) app.vela.ui.MapPoiPrefs.speedcamMinZoom.floatValue else 11f
+    val scMinZ = when {
+        app.vela.ui.MapPoiPrefs.speedcamMinZoom.floatValue in 0.001f..0.05f -> 0f
+        app.vela.ui.MapPoiPrefs.speedcamMinZoom.floatValue > 0.05f -> app.vela.ui.MapPoiPrefs.speedcamMinZoom.floatValue
+        else -> 11f
+    }
     style.getLayer(SPEEDCAM_LAYER)?.setMinZoom(scMinZ)
 
     val flockMinZ = app.vela.ui.MapPoiPrefs.flockMinZoom.floatValue
     val survMinZ = app.vela.ui.MapPoiPrefs.surveillanceCamMinZoom.floatValue
-    val camsClusterMinZ = minOf(if (flockMinZ > 0f) flockMinZ else 11f, if (survMinZ > 0f) survMinZ else 11f)
+    fun cMinZ(z: Float): Float = when {
+        z in 0.001f..0.05f -> 0f
+        z > 0.05f -> z
+        else -> 11f
+    }
+    val camsClusterMinZ = minOf(cMinZ(flockMinZ), cMinZ(survMinZ))
     val camsDetailMinZ = if (camsClusterMinZ < 14f) 14f else camsClusterMinZ
     style.getLayer(FLOCK_CLUSTER_LAYER)?.let {
         it.minZoom = camsClusterMinZ
@@ -11595,7 +11646,8 @@ private fun controlsOpacityExpression(
 ): Expression {
     fun iconOp(show: Boolean, minZ: Float): Expression {
         if (!show) return Expression.literal(0f)
-        val z = if (minZ > 0f) minZ else 15.4f
+        if (minZ in 0.001f..0.05f) return Expression.literal(1f)
+        val z = if (minZ > 0.05f) minZ else 15.4f
         return Expression.step(Expression.zoom(), Expression.literal(0f), Expression.stop(z, Expression.literal(1f)))
     }
     return Expression.match(
